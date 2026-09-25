@@ -680,6 +680,8 @@ Manual editing of the ini file is required to copy from old section to the new s
 - Requires enabling both Nameplates Zeal fonts and tags (`/tag on`)
 - Tagged NPC nameplates use either the dedicated `Tagged` color or if targeted the `Target` color
 - Tagged nameplates have a matching implicit colored arrow added if `Default tag arrow` is set
+- Corpses (NPC and player) can be tagged too. A corpse shows only tags set on it after the death, so a
+  kill marker the mob carried does not linger on its corpse
 - Tags can be set with locally or broadcast through rsay, gsay, or a joined chat channel
   - `/tag <rsay | gsay | chat | local> <tag_text>`
   - Note: % replacement commands (%t, %n) aren't supported in `<tag_text>`

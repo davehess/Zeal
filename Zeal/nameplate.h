@@ -143,6 +143,7 @@ class NamePlate {
     std::string tag_text;
     DWORD color;
     DWORD tag_color;
+    bool corpse_tag = false;  // The tag was set on the corpse (tags from before the death stay hidden).
   };
 
   struct RenderInfo {
