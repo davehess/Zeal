@@ -728,6 +728,14 @@ Manual editing of the ini file is required to copy from old section to the new s
   - Targets closest NPC if multiple matches
 - International keyboard support:
   - Nameplate Tab Alternate Symbols options allows `*` in place of `^`.
+- Tags are kept through zoning, a character switch, a device reset and a client crash (`/tag persist <on | off>`,
+  on by default)
+  - Saved per zone and spawn id to `<character>_tags.txt` in the EverQuest folder as they change
+  - Restored when a mob with the same zone, spawn id and name appears again; dropped when it dies, when a
+    `clear` is received, or 3 hours after it was last seen
+  - Tags broadcast while you were offline are not recovered
+- A received tag only applies if the target name in it matches the mob with that spawn id, so tags sent from
+  another zone (rsay or a chat channel) no longer land on an unrelated mob that shares the spawn id
 
 ### Tagging Examples
   - `/tag rsay Assist me` broadcasts a raid-wide tag that sets 'Assist Me'
