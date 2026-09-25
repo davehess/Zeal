@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 
 #include "callbacks.h"
 #include "chat.h"
@@ -37,6 +38,19 @@ enum TagArrowColor : DWORD {
   Nameplate = 1,
   Paw = D3DCOLOR_XRGB(0x20, 0xc0, 0x20),       // Ensure this is unique.
   StopSign = D3DCOLOR_XRGB(0xf0, 0x00, 0x00),  // Ensure this is unique.
+  Skull = D3DCOLOR_XRGB(0xe8, 0xe2, 0xd1),     // Icon shapes (keys K X A D F T WP M U N H $ E): ensure unique.
+  Cross = D3DCOLOR_XRGB(0xe8, 0x1c, 0x1c),
+  Sword = D3DCOLOR_XRGB(0xf2, 0xc0, 0x2a),
+  Diamond = D3DCOLOR_XRGB(0x2e, 0x8c, 0xf5),
+  Flame = D3DCOLOR_XRGB(0x3c, 0xd8, 0x3c),
+  Star = D3DCOLOR_XRGB(0xb5, 0x5c, 0xf2),
+  Wolf = D3DCOLOR_XRGB(0xe8, 0xe2, 0xd4),  // The landing-page wolf's bone.
+  Moon = D3DCOLOR_XRGB(0xf2, 0xf2, 0xf5),
+  Lasso = D3DCOLOR_XRGB(0x9c, 0x5f, 0x2e),
+  Lute = D3DCOLOR_XRGB(0xa8, 0x6b, 0x3a),
+  Shield = D3DCOLOR_XRGB(0xa8, 0xb0, 0xbc),
+  Dollar = D3DCOLOR_XRGB(0x3a, 0xb0, 0x5a),
+  Euro = D3DCOLOR_XRGB(0xe8, 0xa0, 0x20),
   Red = D3DCOLOR_XRGB(0xff, 0, 0),
   Orange = D3DCOLOR_XRGB(0xff, 0x80, 0),
   Yellow = D3DCOLOR_XRGB(0xff, 0xff, 0),
@@ -44,6 +58,150 @@ enum TagArrowColor : DWORD {
   Blue = D3DCOLOR_XRGB(0, 0, 0xff),
   White = D3DCOLOR_XRGB(0xff, 0xff, 0xff),
 };
+
+// Numbered badges ^1^ to ^12^ all look alike (a white badge). The shape is looked up from the tag color,
+// so each number's color differs in the low bits of blue only, which keeps every key's value unique.
+static constexpr DWORD kNumberColorBase = D3DCOLOR_XRGB(0xf0, 0xf0, 0xf0);
+static constexpr int kMaxTagNumber = 12;
+static constexpr const char *kNumberNames[kMaxTagNumber] = {"#1", "#2", "#3", "#4",  "#5",  "#6",
+                                                            "#7", "#8", "#9", "#10", "#11", "#12"};
+
+static DWORD GetNumberColor(int number) { return kNumberColorBase + number; }
+
+// Returns the badge number (1 to 12) of a tag color, else 0.
+static int GetTagNumber(DWORD tag_color) {
+  if (tag_color <= kNumberColorBase || tag_color > kNumberColorBase + kMaxTagNumber) return 0;
+  return static_cast<int>(tag_color - kNumberColorBase);
+}
+
+// The paw with a letter or digit on its pad (^PK^: a charmer's initial) looks like the paw; as with the
+// numbers, the low bits of blue carry which glyph it is.
+static constexpr DWORD kPawGlyphColorBase = D3DCOLOR_XRGB(0x20, 0xc0, 0x40);
+static constexpr int kPawGlyphCount = 36;  // '0' to '9', then 'A' to 'Z'.
+
+// Returns the glyph index (0 to 35) of a paw-with-glyph tag color, else -1.
+static int GetPawGlyph(DWORD tag_color) {
+  if (tag_color < kPawGlyphColorBase || tag_color >= kPawGlyphColorBase + kPawGlyphCount) return -1;
+  return static_cast<int>(tag_color - kPawGlyphColorBase);
+}
+
+// Guild banners (^BEUR^) and guild icons (^IMAY^) each have their own color (TagShapes::kGuilds), which is
+// how the shape is found again. A guild whose icon is an existing shape (icon_key) uses that shape's color.
+static DWORD GetGuildBannerColor(int guild) { return 0xff000000u | TagShapes::kGuilds[guild].banner_rgb; }
+
+static DWORD GetGuildIconColor(int guild) { return 0xff000000u | TagShapes::kGuilds[guild].icon_rgb; }
+
+// Returns the guild index of a banner tag color, else -1.
+static int GetGuildBanner(DWORD tag_color) {
+  for (int i = 0; i < TagShapes::kGuildCount; ++i)
+    if (GetGuildBannerColor(i) == tag_color) return i;
+  return -1;
+}
+
+// Returns the guild index of a guild icon tag color (only guilds with an icon of their own), else -1.
+static int GetGuildIcon(DWORD tag_color) {
+  for (int i = 0; i < TagShapes::kGuildCount; ++i)
+    if (!TagShapes::kGuilds[i].icon_key && GetGuildIconColor(i) == tag_color) return i;
+  return -1;
+}
+
+// Display name of an icon, numbered or lettered shape (nullptr for the arrows, plain paw and stop sign).
+static const char *GetShapeName(DWORD tag_color) {
+  if (int number = GetTagNumber(tag_color)) return kNumberNames[number - 1];
+  if (int glyph = GetPawGlyph(tag_color); glyph >= 0) {
+    static char names[kPawGlyphCount][6];  // "Paw K"
+    if (!names[glyph][0])
+      snprintf(names[glyph], sizeof(names[glyph]), "Paw %c", "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[glyph]);
+    return names[glyph];
+  }
+  if (int guild = GetGuildBanner(tag_color); guild >= 0) {
+    static char names[TagShapes::kGuildCount][12];  // "Banner EUR"
+    if (!names[guild][0]) snprintf(names[guild], sizeof(names[guild]), "Banner %s", TagShapes::kGuilds[guild].code);
+    return names[guild];
+  }
+  if (int guild = GetGuildIcon(tag_color); guild >= 0) {
+    static char names[TagShapes::kGuildCount][12];  // "Icon MAY"
+    if (!names[guild][0]) snprintf(names[guild], sizeof(names[guild]), "Icon %s", TagShapes::kGuilds[guild].code);
+    return names[guild];
+  }
+  switch (tag_color) {
+    case TagArrowColor::Skull:
+      return "Skull";
+    case TagArrowColor::Cross:
+      return "X";
+    case TagArrowColor::Sword:
+      return "Sword";
+    case TagArrowColor::Diamond:
+      return "Diamond";
+    case TagArrowColor::Flame:
+      return "Flame";
+    case TagArrowColor::Star:
+      return "Star";
+    case TagArrowColor::Wolf:
+      return "Wolf";
+    case TagArrowColor::Moon:
+      return "Moon";
+    case TagArrowColor::Lasso:
+      return "Lasso";
+    case TagArrowColor::Lute:
+      return "Lute";
+    case TagArrowColor::Shield:
+      return "Shield";
+    case TagArrowColor::Dollar:
+      return "Dollar";
+    case TagArrowColor::Euro:
+      return "Euro";
+    default:
+      break;
+  }
+  return nullptr;
+}
+
+// The shape drawn for an explicit tag color (plain colors draw an arrow).
+static TagArrows::Shape GetTagShape(DWORD tag_color) {
+  if (int number = GetTagNumber(tag_color))
+    return static_cast<TagArrows::Shape>(static_cast<int>(TagArrows::Shape::Number1) + number - 1);
+  if (GetPawGlyph(tag_color) >= 0) return TagArrows::Shape::Paw;  // The glyph is queued on top separately.
+  if (int guild = GetGuildBanner(tag_color); guild >= 0)
+    return static_cast<TagArrows::Shape>(static_cast<int>(TagArrows::Shape::Banner0) + guild);
+  if (int guild = GetGuildIcon(tag_color); guild >= 0)
+    return static_cast<TagArrows::Shape>(static_cast<int>(TagArrows::Shape::GuildIcon0) + guild);
+  switch (tag_color) {
+    case TagArrowColor::Paw:
+      return TagArrows::Shape::Paw;
+    case TagArrowColor::StopSign:
+      return TagArrows::Shape::Octagon;
+    case TagArrowColor::Skull:
+      return TagArrows::Shape::Skull;
+    case TagArrowColor::Cross:
+      return TagArrows::Shape::Cross;
+    case TagArrowColor::Sword:
+      return TagArrows::Shape::Sword;
+    case TagArrowColor::Diamond:
+      return TagArrows::Shape::Diamond;
+    case TagArrowColor::Flame:
+      return TagArrows::Shape::Flame;
+    case TagArrowColor::Star:
+      return TagArrows::Shape::Star;
+    case TagArrowColor::Wolf:
+      return TagArrows::Shape::Wolf;
+    case TagArrowColor::Moon:
+      return TagArrows::Shape::Moon;
+    case TagArrowColor::Lasso:
+      return TagArrows::Shape::Lasso;
+    case TagArrowColor::Lute:
+      return TagArrows::Shape::Lute;
+    case TagArrowColor::Shield:
+      return TagArrows::Shape::Shield;
+    case TagArrowColor::Dollar:
+      return TagArrows::Shape::Dollar;
+    case TagArrowColor::Euro:
+      return TagArrows::Shape::Euro;
+    default:
+      break;
+  }
+  return TagArrows::Shape::Arrow;
+}
 
 static float z_position_offset = 1.5f;  // Static global to allow parse overrides during evaluation.
 
@@ -418,12 +576,14 @@ void NamePlate::render_ui() {
     // If an explicit tag color was set, use that color otherwise use the nameplate color.
     if (!is_corpse && info.tag_color != TagArrowColor::Off) {
       auto tag_color = (info.tag_color == TagArrowColor::Nameplate) ? nameplate_color : info.tag_color;
-      TagArrows::Shape shape = (tag_color == TagArrowColor::Paw)        ? TagArrows::Shape::Paw
-                               : (tag_color == TagArrowColor::StopSign) ? TagArrows::Shape::Octagon
-                                                                        : TagArrows::Shape::Arrow;
+      TagArrows::Shape shape = GetTagShape(info.tag_color);  // From the tag, so no nameplate color can match.
       position.z += sprite_font->get_text_height(full_text) + 1.5f;
       float bearing = (shape == TagArrows::Shape::Arrow) ? 0.0f : get_bearing(self, entity);
       tag_arrows->QueueTagShape(position, tag_color, shape, bearing);
+      if (int glyph = GetPawGlyph(info.tag_color); glyph >= 0)  // The charmer's initial, over the paw's pad.
+        tag_arrows->QueueTagShape(position, tag_color,
+                                  static_cast<TagArrows::Shape>(static_cast<int>(TagArrows::Shape::Glyph0) + glyph),
+                                  bearing);
     }
   }
   tag_arrows->FlushQueueToScreen();
@@ -910,6 +1070,19 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
     return;
   }
 
+  if (args.size() == 2 && args[1] == "guilds") {
+    Zeal::Game::print_chat("Guild banners ^B<code>^ and icons ^I<code>^ (like /tag local ^BEUR^):");
+    std::string line;
+    for (int i = 0; i < TagShapes::kGuildCount; ++i) {
+      line += std::string(line.empty() ? "" : ", ") + TagShapes::kGuilds[i].code + " " + TagShapes::kGuilds[i].name;
+      if (i % 5 == 4 || i + 1 == TagShapes::kGuildCount) {
+        Zeal::Game::print_chat("  %s", line.c_str());
+        line.clear();
+      }
+    }
+    return;
+  }
+
   if (args.size() == 2 && args[1] == "clear") {
     auto target = Zeal::Game::get_target();
     if (target) {
@@ -982,15 +1155,66 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   Zeal::Game::print_chat("Usage: /tag target <text_to_match>");
   Zeal::Game::print_chat("Usage: /tag <gsay | rsay | chat> local> <message | clear | channel>");
   Zeal::Game::print_chat("Usage: <message> prefixes: '+' to append, '^R^' or '*R:' for color arrow (R, O, Y, G, B, W)");
+  Zeal::Game::print_chat(
+      "Usage: shapes in place of the color: P paw, S stop, K skull, X x, A sword, D diamond, F flame, T star, "
+      "WP wolf, M moon, U lasso, N lute, H shield, $ dollar, E euro");
+  Zeal::Game::print_chat("Usage: numbered badges in place of the color: 1 to 12 (like '^7^' or '^12^')");
+  Zeal::Game::print_chat("Usage: a paw with a letter or digit on it: P then the character (like '^PK^')");
+  Zeal::Game::print_chat(
+      "Usage: a guild's banner or icon: B or I then its code (like '^BEUR^'); /tag guilds lists them");
   Zeal::Game::print_chat("Example: /tag rsay Assist me");
   Zeal::Game::print_chat("Example: /tag gsay Off tank");
   Zeal::Game::print_chat("Example: /tag gsay clear (broadcasts a clear all tags)");
   return;
 }
 
-// Returns a RGB color based on the color_key (else TagArrowColor::Off if no match).
-static D3DCOLOR GetTagArrowColor(char color_key) {
-  color_key = std::tolower(color_key);
+// Returns the guild index of a `kind` ('b' or 'i') plus guild code key (like "BEUR" or "imay"), else -1.
+static int ReadGuildKey(const std::string &key, char kind) {
+  if (key.size() < 3 || std::tolower(static_cast<unsigned char>(key[0])) != kind) return -1;
+  return TagShapes::GuildIndex(key.substr(1));
+}
+
+// Returns the key of a "^key^" prefix (text starts with '^'): two digits for "^10^" to "^12^", 'P' plus
+// a letter or digit for a paw with that character ("^PK^"), "WP" for the wolf ("^WP^"), 'B' or 'I' plus
+// a guild code for that guild's banner or icon ("^BEUR^", "^IEUR^"), else the single character after the
+// '^'. Older clients read only the first character, so "^PK^" shows them a plain paw, "^WP^" a white arrow
+// and "^BEUR^" a blue one.
+static std::string ReadTagKey(const std::string &text) {
+  bool two_digits = text.size() > 3 && std::isdigit(static_cast<unsigned char>(text[1])) &&
+                    std::isdigit(static_cast<unsigned char>(text[2])) && text[3] == '^';
+  bool paw_glyph =
+      text.size() > 3 && (text[1] == 'p' || text[1] == 'P') && TagShapes::GlyphIndex(text[2]) >= 0 && text[3] == '^';
+  bool wolf =
+      text.size() > 3 && (text[1] == 'w' || text[1] == 'W') && (text[2] == 'p' || text[2] == 'P') && text[3] == '^';
+  // A guild key runs to the next '^' and must name a guild, so "^Blue^" stays a blue arrow.
+  const size_t end = text.find('^', 1);
+  if (end != std::string::npos) {
+    const std::string key = text.substr(1, end - 1);
+    if (ReadGuildKey(key, 'b') >= 0 || ReadGuildKey(key, 'i') >= 0) return key;
+  }
+  return text.substr(1, (two_digits || paw_glyph || wolf) ? 2 : 1);
+}
+
+// Returns a RGB color based on the key (else TagArrowColor::Off if no match).
+static D3DCOLOR GetTagArrowColor(const std::string &key) {
+  if (key.empty()) return TagArrowColor::Off;
+  if (std::isdigit(static_cast<unsigned char>(key[0]))) {  // Numbered badge.
+    int number = 0;
+    for (char c : key) number = number * 10 + (c - '0');
+    return (number >= 1 && number <= kMaxTagNumber) ? GetNumberColor(number) : TagArrowColor::Off;
+  }
+  if (key.size() == 2 && (key[0] == 'p' || key[0] == 'P')) {  // Paw with a letter or digit.
+    int glyph = TagShapes::GlyphIndex(key[1]);
+    return (glyph >= 0) ? kPawGlyphColorBase + glyph : TagArrowColor::Off;
+  }
+  if (key.size() == 2 && (key[0] == 'w' || key[0] == 'W') && (key[1] == 'p' || key[1] == 'P'))
+    return TagArrowColor::Wolf;
+  if (int guild = ReadGuildKey(key, 'b'); guild >= 0) return GetGuildBannerColor(guild);
+  if (int guild = ReadGuildKey(key, 'i'); guild >= 0) {
+    const char *icon_key = TagShapes::kGuilds[guild].icon_key;
+    return icon_key ? GetTagArrowColor(icon_key) : GetGuildIconColor(guild);
+  }
+  char color_key = std::tolower(key[0]);
   switch (color_key) {
     case 'r':
       return TagArrowColor::Red;
@@ -1008,6 +1232,30 @@ static D3DCOLOR GetTagArrowColor(char color_key) {
       return TagArrowColor::Paw;
     case 's':
       return TagArrowColor::StopSign;
+    case 'k':
+      return TagArrowColor::Skull;
+    case 'x':
+      return TagArrowColor::Cross;
+    case 'a':
+      return TagArrowColor::Sword;
+    case 'd':
+      return TagArrowColor::Diamond;
+    case 'f':
+      return TagArrowColor::Flame;
+    case 't':
+      return TagArrowColor::Star;
+    case 'm':
+      return TagArrowColor::Moon;
+    case 'u':
+      return TagArrowColor::Lasso;
+    case 'n':
+      return TagArrowColor::Lute;
+    case 'h':
+      return TagArrowColor::Shield;
+    case '$':
+      return TagArrowColor::Dollar;
+    case 'e':
+      return TagArrowColor::Euro;
     default:
       break;
   }
@@ -1099,8 +1347,9 @@ bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_m
   // The tag arrow is either enabled explicitly with a specific color (which must be disabled explicitly)
   // or enabled by default on a NPC if there is any tag text (can suppress with ^-^).
   if (tag_text.size() > 2 && tag_text[0] == '^') {
-    it->second.tag_color = GetTagArrowColor(tag_text[1]);
-    tag_text = tag_text.substr(2);
+    const std::string key = ReadTagKey(tag_text);
+    it->second.tag_color = GetTagArrowColor(key);
+    tag_text = tag_text.substr(1 + key.size());
   } else if (it->second.tag_color == TagArrowColor::Off || it->second.tag_color == TagArrowColor::Nameplate) {
     bool disable_arrow = !setting_tag_default_arrow.get() || entity->Type != Zeal::GameEnums::NPC ||
                          (tag_text.empty() && it->second.tag_text.empty());
@@ -1267,13 +1516,17 @@ static std::string prettyprint_tag_message(const std::string &msg) {
   }
 
   if (text.size() > 2 && text[0] == '^') {
-    if (text[1] == 's' || text[1] == 'S')
+    const std::string key = ReadTagKey(text);
+    const char *shape_name = GetShapeName(GetTagArrowColor(key));
+    if (key == "s" || key == "S")
       prefix += "Stop";
-    else if (text[1] == 'p' || text[1] == 'P')
+    else if (key == "p" || key == "P")
       prefix += "Paw";
+    else if (shape_name)
+      prefix += shape_name;
     else
-      prefix += std::string("Arrow:") + text[1];
-    text = text.substr(2);
+      prefix += "Arrow:" + key;
+    text = text.substr(1 + key.size());
   }
 
   // Prefix ends with a ^ if one exists. Adding this search here to try and support
@@ -1361,6 +1614,7 @@ static const char *get_tag_color_description(DWORD color) {
     case TagArrowColor::StopSign:
       return "Stop";
     default:
+      if (const char *name = GetShapeName(color)) return name;
       break;
   }
   return "Unknown";
