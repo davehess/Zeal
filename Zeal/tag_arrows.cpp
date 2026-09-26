@@ -1,9 +1,18 @@
 #include "tag_arrows.h"
 
+#include <algorithm>
 #include <array>
+#include <filesystem>
+#include <fstream>
 #include <span>
 
 #include "game_functions.h"
+
+// Tag pictures: the file is checked before it is decoded, and the picture stands about as tall as the arrow.
+static constexpr uintmax_t kMaxImageFileBytes = 1024 * 1024;
+static constexpr unsigned int kMaxImagePixels = 512;  // On either side.
+static constexpr float kImageHeight = 3.5f;           // World units (the arrow is 4 tall).
+static constexpr float kMaxImageAspect = 2.f;         // Wider pictures are squeezed to twice their height.
 
 // Arrow consists of 3 circles with a vertex at the tip.
 static constexpr int kNumCircleVertices = 60;                         // Spaced every 6 degrees.
@@ -136,6 +145,14 @@ void TagArrows::Release() {
   index_buffer = nullptr;
 
   arrow_queue.clear();
+  ForgetImages();
+}
+
+void TagArrows::ForgetImages() {
+  for (auto &[filename, image] : images)
+    if (image.texture) image.texture->Release();
+  images.clear();
+  image_queue.clear();
 }
 
 void TagArrows::Dump() const {
@@ -152,7 +169,62 @@ void TagArrows::QueueTagShape(const Vec3 &position, const D3DCOLOR color, Shape 
   arrow_queue.emplace_back(Arrow{.position = position, .color = color, .shape = shape, .bearing = bearing});
 }
 
+bool TagArrows::QueueTagImage(const Vec3 &position, const std::string &filename) {
+  auto it = images.find(filename);
+  if (it == images.end()) it = images.emplace(filename, ReadImageFile(filename)).first;
+  if (!it->second.texture) return false;
+  image_queue.push_back(
+      Image{.position = position, .texture = it->second.texture, .width = kImageHeight * it->second.aspect});
+  return true;
+}
+
+// Reads a picture's size from its header (a PNG's IHDR, or a true-color TGA's header), so an oversized file
+// is refused before it is decoded. Returns false for anything that isn't one of those.
+static bool ReadImageSize(const std::string &filename, unsigned int &width, unsigned int &height) {
+  std::ifstream file(filename, std::ios::binary);
+  std::array<unsigned char, 24> header = {};
+  if (!file.read(reinterpret_cast<char *>(header.data()), header.size())) return false;
+  static constexpr std::array<unsigned char, 8> kPngSignature = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+  if (std::equal(kPngSignature.begin(), kPngSignature.end(), header.begin())) {
+    auto big_endian = [&](int i) {
+      return (static_cast<unsigned int>(header[i]) << 24) | (header[i + 1] << 16) | (header[i + 2] << 8) |
+             header[i + 3];
+    };
+    width = big_endian(16);
+    height = big_endian(20);
+    return true;
+  }
+  if (header[2] != 2 && header[2] != 10) return false;  // TGA image type: true-color, plain or run-length.
+  width = header[12] | (header[13] << 8);
+  height = header[14] | (header[15] << 8);
+  return true;
+}
+
+TagArrows::LoadedImage TagArrows::ReadImageFile(const std::string &filename) {
+  std::error_code error;
+  const uintmax_t bytes = std::filesystem::file_size(filename, error);
+  unsigned int width = 0, height = 0;
+  if (error || bytes == 0 || bytes > kMaxImageFileBytes || !ReadImageSize(filename, width, height) || width == 0 ||
+      height == 0 || width > kMaxImagePixels || height > kMaxImagePixels) {
+    Zeal::Game::print_chat("Tag picture skipped (needs a PNG or TGA, up to %d pixels a side and 1 MB): %s",
+                           kMaxImagePixels, filename.c_str());
+    return {};
+  }
+  IDirect3DTexture8 *texture = nullptr;
+  if (FAILED(D3DXCreateTextureFromFileExA(&device, filename.c_str(), D3DX_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0,
+                                          D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, D3DX_DEFAULT, D3DX_DEFAULT, 0, nullptr,
+                                          nullptr, &texture))) {
+    Zeal::Game::print_chat("Tag picture failed to load: %s", filename.c_str());
+    return {};
+  }
+  return LoadedImage{.texture = texture, .aspect = min(kMaxImageAspect, static_cast<float>(width) / height)};
+}
+
 void TagArrows::FlushQueueToScreen() {
+  if (!image_queue.empty()) {  // Pictures need none of the shape buffers below.
+    RenderImages();
+    image_queue.clear();
+  }
   if (arrow_queue.empty()) return;
 
   if (!vertex_buffer) {
@@ -224,6 +296,65 @@ void TagArrows::RenderQueue() {
   device.SetStreamSource(0, NULL, 0);  // Unbind vertex buffer.
   device.SetIndices(NULL, 0);          // Ensure index_buffer is no longer bound.
   device.SetTransform(D3DTS_WORLD, &originalWorldMatrix);
+  render_state.restore_state();
+}
+
+// Draws each queued picture as a quad that faces the camera, the same way the nameplate text does.
+void TagArrows::RenderImages() {
+  D3DRenderStateStash render_state(device);
+  render_state.store_and_modify({D3DRS_CULLMODE, D3DCULL_NONE});
+  render_state.store_and_modify({D3DRS_ALPHABLENDENABLE, TRUE});
+  render_state.store_and_modify({D3DRS_SRCBLEND, D3DBLEND_SRCALPHA});
+  render_state.store_and_modify({D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA});
+  render_state.store_and_modify({D3DRS_ALPHATESTENABLE, TRUE});  // Clear pixels leave the depth buffer alone.
+  render_state.store_and_modify({D3DRS_ALPHAREF, 0x08});
+  render_state.store_and_modify({D3DRS_ALPHAFUNC, D3DCMP_GREATER});
+  render_state.store_and_modify({D3DRS_ZENABLE, TRUE});
+  render_state.store_and_modify({D3DRS_ZWRITEENABLE, TRUE});
+  render_state.store_and_modify({D3DRS_LIGHTING, FALSE});
+
+  D3DTextureStateStash texture_state(device);
+  texture_state.store_and_modify({D3DTSS_COLOROP, D3DTOP_MODULATE});
+  texture_state.store_and_modify({D3DTSS_COLORARG1, D3DTA_TEXTURE});
+  texture_state.store_and_modify({D3DTSS_COLORARG2, D3DTA_DIFFUSE});
+  texture_state.store_and_modify({D3DTSS_ALPHAOP, D3DTOP_MODULATE});
+  texture_state.store_and_modify({D3DTSS_ALPHAARG1, D3DTA_TEXTURE});
+  texture_state.store_and_modify({D3DTSS_ALPHAARG2, D3DTA_DIFFUSE});
+  texture_state.store_and_modify({D3DTSS_MINFILTER, D3DTEXF_LINEAR});
+  texture_state.store_and_modify({D3DTSS_MAGFILTER, D3DTEXF_LINEAR});
+  texture_state.store_and_modify({D3DTSS_MIPFILTER, D3DTEXF_LINEAR});  // Smaller copies for distant tags.
+  texture_state.store_and_modify({D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP});
+  texture_state.store_and_modify({D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP});
+
+  // Note: Not preserving shader or texture to avoid reference counting.
+  device.SetVertexShader(ImageVertex::kFvfCode);
+
+  D3DXMATRIX original_world, view, face_camera, translation, world;
+  device.GetTransform(D3DTS_WORLD, &original_world);
+  device.GetTransform(D3DTS_VIEW, &view);
+  D3DXMatrixIdentity(&face_camera);  // Transpose the rotation of the camera view (as SpriteFont does).
+  for (int row = 0; row < 3; row++)
+    for (int col = 0; col < 3; col++) face_camera(col, row) = view(row, col);
+
+  constexpr D3DCOLOR kWhite = 0xffffffff;  // Untinted.
+  for (const auto &image : image_queue) {
+    // Model y runs down the picture, as the nameplate text is laid out, so the picture spans y from
+    // -kImageHeight (its top) to 0 (its bottom, at the position).
+    const float half = image.width / 2;
+    const ImageVertex vertices[4] = {{-half, -kImageHeight, 0, kWhite, 0, 0},
+                                     {half, -kImageHeight, 0, kWhite, 1, 0},
+                                     {-half, 0, 0, kWhite, 0, 1},
+                                     {half, 0, 0, kWhite, 1, 1}};
+    D3DXMatrixTranslation(&translation, image.position.x, image.position.y, image.position.z);
+    world = face_camera * translation;
+    device.SetTransform(D3DTS_WORLD, &world);
+    device.SetTexture(0, image.texture);
+    device.DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, vertices, sizeof(ImageVertex));
+  }
+
+  device.SetTexture(0, NULL);  // Release the reference to the last picture.
+  device.SetTransform(D3DTS_WORLD, &original_world);
+  texture_state.restore_state();
   render_state.restore_state();
 }
 

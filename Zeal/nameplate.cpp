@@ -7,6 +7,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <map>
 
 #include "callbacks.h"
 #include "chat.h"
@@ -18,6 +19,7 @@
 #include "string_util.h"
 #include "tag_arrows.h"
 #include "target_ring.h"
+#include "ui_skin.h"
 #include "zeal.h"
 
 // Test cases:
@@ -106,6 +108,50 @@ static int GetGuildIcon(DWORD tag_color) {
   for (int i = 0; i < TagShapes::kGuildCount; ++i)
     if (!TagShapes::kGuilds[i].icon_key && GetGuildIconColor(i) == tag_color) return i;
   return -1;
+}
+
+// Tag pictures (^IEUR^ with EUR.png): <code>.png or <code>.tga files in uifiles/zeal/tagicons, like the
+// target ring textures. A picture takes over from a built-in guild icon with the same code. A viewer
+// without the file sees the guild's built-in shape, or only the text for a code that isn't a guild. The
+// folder is read on first use and again on /tag icons, so a picture added while playing needs that command.
+static constexpr char kTagImageFolder[] = "tagicons";
+static constexpr size_t kMaxTagImageCode = 6;  // Letters and digits, keeping "^I<code>^" short.
+
+static std::string ToLower(std::string text) {
+  std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return std::tolower(c); });
+  return text;
+}
+
+static std::map<std::string, std::filesystem::path> ScanTagImages() {
+  std::map<std::string, std::filesystem::path> images;  // By lower-case code.
+  try {
+    for (const auto &entry : std::filesystem::directory_iterator(UISkin::get_zeal_resources_path() / kTagImageFolder)) {
+      const std::string code = ToLower(entry.path().stem().string());
+      const std::string extension = ToLower(entry.path().extension().string());
+      if (!entry.is_regular_file() || (extension != ".png" && extension != ".tga") || code.empty() ||
+          code.size() > kMaxTagImageCode ||
+          !std::all_of(code.begin(), code.end(), [](unsigned char c) { return std::isalnum(c); }))
+        continue;
+      images.emplace(code, entry.path());  // With both EUR.png and EUR.tga, the first one listed wins.
+    }
+  } catch (const std::filesystem::filesystem_error &) {
+    // No folder, or it can't be read: no pictures.
+  }
+  return images;
+}
+
+static const std::map<std::string, std::filesystem::path> &GetTagImages(bool rescan = false) {
+  static std::map<std::string, std::filesystem::path> images = ScanTagImages();
+  if (rescan) images = ScanTagImages();
+  return images;
+}
+
+// Returns the picture file named by an 'I' plus code key ("IEUR" or "ieur"), else nullptr.
+static const std::filesystem::path *GetTagImage(const std::string &key) {
+  if (key.size() < 2 || std::tolower(static_cast<unsigned char>(key[0])) != 'i') return nullptr;
+  const auto &images = GetTagImages();
+  const auto it = images.find(ToLower(key.substr(1)));
+  return (it == images.end()) ? nullptr : &it->second;
 }
 
 // Display name of an icon, numbered or lettered shape (nullptr for the arrows, plain paw and stop sign).
@@ -585,6 +631,8 @@ void NamePlate::render_ui() {
       auto tag_color = (info.tag_color == TagArrowColor::Nameplate) ? nameplate_color : info.tag_color;
       TagArrows::Shape shape = GetTagShape(info.tag_color);  // From the tag, so no nameplate color can match.
       position.z += sprite_font->get_text_height(full_text) + 1.5f;
+      const auto *image = info.tag_image.empty() ? nullptr : GetTagImage("i" + info.tag_image);
+      if (image && tag_arrows->QueueTagImage(position, image->string())) continue;  // Drawn in place of a shape.
       float bearing = (shape == TagArrows::Shape::Arrow) ? 0.0f : get_bearing(self, entity);
       tag_arrows->QueueTagShape(position, tag_color, shape, bearing);
       if (int glyph = GetPawGlyph(info.tag_color); glyph >= 0)  // The charmer's initial, over the paw's pad.
@@ -1239,6 +1287,25 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
     return;
   }
 
+  if (args.size() == 2 && args[1] == "icons") {
+    const auto &images = GetTagImages(true);     // Reads the folder again, so new pictures count.
+    if (tag_arrows) tag_arrows->ForgetImages();  // And changed pictures are loaded again.
+    const auto folder = UISkin::get_zeal_resources_path() / kTagImageFolder;
+    Zeal::Game::print_chat("Tag pictures ^I<name>^ from %s (<name>.png or .tga, up to %d letters or digits):",
+                           folder.string().c_str(), static_cast<int>(kMaxTagImageCode));
+    if (images.empty()) Zeal::Game::print_chat("  none found");
+    std::string line;
+    int count = 0;
+    for (const auto &[code, path] : images) {
+      line += std::string(line.empty() ? "" : ", ") + path.stem().string();
+      if (++count % 10 == 0 || count == static_cast<int>(images.size())) {
+        Zeal::Game::print_chat("  %s", line.c_str());
+        line.clear();
+      }
+    }
+    return;
+  }
+
   if (args.size() == 2 && args[1] == "clear") {
     auto target = Zeal::Game::get_target();
     if (target) {
@@ -1318,6 +1385,9 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   Zeal::Game::print_chat("Usage: a paw with a letter or digit on it: P then the character (like '^PK^')");
   Zeal::Game::print_chat(
       "Usage: a guild's banner or icon: B or I then its code (like '^BEUR^'); /tag guilds lists them");
+  Zeal::Game::print_chat(
+      "Usage: a picture from uifiles/zeal/tagicons: I then its file name (like '^IEUR^' for EUR.png); /tag icons "
+      "lists them");
   Zeal::Game::print_chat("Example: /tag rsay Assist me");
   Zeal::Game::print_chat("Example: /tag gsay Off tank");
   Zeal::Game::print_chat("Example: /tag gsay clear (broadcasts a clear all tags)");
@@ -1332,9 +1402,9 @@ static int ReadGuildKey(const std::string &key, char kind) {
 
 // Returns the key of a "^key^" prefix (text starts with '^'): two digits for "^10^" to "^12^", 'P' plus
 // a letter or digit for a paw with that character ("^PK^"), "WP" for the wolf ("^WP^"), 'B' or 'I' plus
-// a guild code for that guild's banner or icon ("^BEUR^", "^IEUR^"), else the single character after the
-// '^'. Older clients read only the first character, so "^PK^" shows them a plain paw, "^WP^" a white arrow
-// and "^BEUR^" a blue one.
+// a guild code for that guild's banner or icon ("^BEUR^", "^IEUR^"), 'I' plus the code of a picture in the
+// tagicons folder, else the single character after the '^'. Older clients read only the first character,
+// so "^PK^" shows them a plain paw, "^WP^" a white arrow and "^BEUR^" a blue one.
 static std::string ReadTagKey(const std::string &text) {
   bool two_digits = text.size() > 3 && std::isdigit(static_cast<unsigned char>(text[1])) &&
                     std::isdigit(static_cast<unsigned char>(text[2])) && text[3] == '^';
@@ -1342,11 +1412,11 @@ static std::string ReadTagKey(const std::string &text) {
       text.size() > 3 && (text[1] == 'p' || text[1] == 'P') && TagShapes::GlyphIndex(text[2]) >= 0 && text[3] == '^';
   bool wolf =
       text.size() > 3 && (text[1] == 'w' || text[1] == 'W') && (text[2] == 'p' || text[2] == 'P') && text[3] == '^';
-  // A guild key runs to the next '^' and must name a guild, so "^Blue^" stays a blue arrow.
+  // A guild or picture key runs to the next '^' and must name one, so "^Blue^" stays a blue arrow.
   const size_t end = text.find('^', 1);
   if (end != std::string::npos) {
     const std::string key = text.substr(1, end - 1);
-    if (ReadGuildKey(key, 'b') >= 0 || ReadGuildKey(key, 'i') >= 0) return key;
+    if (ReadGuildKey(key, 'b') >= 0 || ReadGuildKey(key, 'i') >= 0 || GetTagImage(key)) return key;
   }
   return text.substr(1, (two_digits || paw_glyph || wolf) ? 2 : 1);
 }
@@ -1515,11 +1585,16 @@ bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_m
   if (tag_text.size() > 2 && tag_text[0] == '^') {
     const std::string key = ReadTagKey(tag_text);
     it->second.tag_color = GetTagArrowColor(key);
+    const bool image = GetTagImage(key) != nullptr;
+    it->second.tag_image = image ? ToLower(key.substr(1)) : "";
+    if (image && it->second.tag_color == TagArrowColor::Off)
+      it->second.tag_color = TagArrowColor::White;  // No built-in shape: a white arrow if the picture won't load.
     tag_text = tag_text.substr(1 + key.size());
   } else if (it->second.tag_color == TagArrowColor::Off || it->second.tag_color == TagArrowColor::Nameplate) {
     bool disable_arrow = !setting_tag_default_arrow.get() || !takes_tag_text(entity) ||
                          (tag_text.empty() && it->second.tag_text.empty());
     it->second.tag_color = disable_arrow ? TagArrowColor::Off : TagArrowColor::Nameplate;
+    it->second.tag_image.clear();  // A cleared picture tag must not come back with the default arrow.
   }
 
   // Support skipping any unrecognized future prefix.
@@ -1688,6 +1763,8 @@ static std::string prettyprint_tag_message(const std::string &msg) {
       prefix += "Stop";
     else if (key == "p" || key == "P")
       prefix += "Paw";
+    else if (const auto *image = GetTagImage(key))
+      prefix += "Picture " + image->stem().string();
     else if (shape_name)
       prefix += shape_name;
     else
