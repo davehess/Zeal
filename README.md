@@ -723,6 +723,9 @@ Manual editing of the ini file is required to copy from old section to the new s
   - Saved per zone and spawn id to `<character>_tags.txt` in the EverQuest folder as they change
   - Restored when a mob with the same zone, spawn id and name appears again; dropped when it dies, when a
     `clear` is received, or 3 hours after it was last seen
+  - A player's tag is kept by name instead, since a player gets a new spawn id each time they zone in: it
+    comes back when they return after zoning, camping or dying, and follows them into other zones with you.
+    It is dropped when cleared, on a `clear`, or 3 hours after they were last seen
   - Tags broadcast while you were offline are not recovered
 - A received tag only applies if the target name in it matches the mob with that spawn id, so tags sent from
   another zone (rsay or a chat channel) no longer land on an unrelated mob that shares the spawn id

@@ -98,6 +98,13 @@ static int __fastcall SetNameSpriteTint_UpdateState(void *this_display, void *no
 void NamePlate::handle_entity_destructor(Zeal::GameStructures::Entity *entity) {
   auto it = nameplate_info_map.find(entity);
   if (it != nameplate_info_map.end()) nameplate_info_map.erase(it);
+
+  // A tagged player who leaves (zoning, camping, dying) comes back as a new entity: let the next sync
+  // restore their tag rather than read the untagged newcomer as a clear.
+  if (entity && entity->Type == Zeal::GameEnums::Player && !saved_player_tags.empty()) {
+    auto saved = saved_player_tags.find(Zeal::Game::strip_name(entity->Name));
+    if (saved != saved_player_tags.end()) saved->second.live_seen = false;
+  }
 }
 
 bool NamePlate::handle_shownames_command(const std::vector<std::string> &args) {
@@ -294,6 +301,7 @@ void NamePlate::load_sprite_font() {
 void NamePlate::clean_ui() {
   nameplate_info_map.clear();
   for (auto &entry : saved_tags) entry.second.live_seen = false;  // Restored as the entities reappear.
+  for (auto &entry : saved_player_tags) entry.second.live_seen = false;
   sprite_font.reset();      // Relying on spritefont destructor to be invoked to release resources.
   tag_arrows.reset();       // Also relying on destructor to release resources.
   tag_channel_number = -1;  // Force a reset.
@@ -820,25 +828,18 @@ void NamePlate::sync_saved_tags() {
 
   const long long now = time(nullptr);
   const int zone_id = self->ZoneId;
-  for (auto &[entity, info] : nameplate_info_map) {
-    if (!entity || !entity->SpawnId) continue;
-    const auto key = std::make_pair(zone_id, static_cast<int>(entity->SpawnId));
-    auto saved = saved_tags.find(key);
-    if (entity->Type >= Zeal::GameEnums::NPCCorpse) {  // A kill ends the tag.
-      if (saved != saved_tags.end()) {
-        saved_tags.erase(saved);
-        saved_tags_dirty = true;
-      }
-      continue;
-    }
 
-    const std::string name = Zeal::Game::strip_name(entity->Name);
+  // One live entity against its saved copy: save a new or changed tag (or note it is still live), restore
+  // the tag onto an entity that is back untagged, and drop a saved tag that was cleared while in view.
+  auto sync_one = [&](auto &saved_map, const auto &key, const std::string &name, Zeal::GameStructures::Entity *entity,
+                      NamePlateInfo &info) {
+    auto saved = saved_map.find(key);
     std::string text = info.tag_text;
     if (!text.empty() && text.back() == '\n') text.pop_back();
     if (!text.empty() || info.tag_color != TagArrowColor::Off) {  // Tagged: save it (or note it is still live).
-      if (saved == saved_tags.end() || saved->second.name != name || saved->second.tag_text != text ||
+      if (saved == saved_map.end() || saved->second.name != name || saved->second.tag_text != text ||
           saved->second.tag_color != info.tag_color) {
-        saved_tags[key] = {
+        saved_map[key] = {
             .name = name, .tag_text = text, .tag_color = info.tag_color, .last_seen = now, .live_seen = true};
         saved_tags_dirty = true;
       } else {
@@ -848,9 +849,9 @@ void NamePlate::sync_saved_tags() {
           saved_tags_dirty = true;
         }
       }
-    } else if (saved != saved_tags.end()) {
+    } else if (saved != saved_map.end()) {
       if (saved->second.name != name || saved->second.live_seen) {
-        saved_tags.erase(saved);  // Another mob now has the spawn id, or the tag was cleared.
+        saved_map.erase(saved);  // Another mob now has the spawn id, or the tag was cleared.
         saved_tags_dirty = true;
       } else {  // Back after zoning, a character switch or a crash: restore it.
         info.tag_text = saved->second.tag_text.empty() ? "" : saved->second.tag_text + "\n";
@@ -861,24 +862,42 @@ void NamePlate::sync_saved_tags() {
           info.color = get_color_callback(static_cast<int>(ColorIndex::Tagged));
       }
     }
+  };
+
+  for (auto &[entity, info] : nameplate_info_map) {
+    if (!entity || !entity->SpawnId) continue;
+    const std::string name = Zeal::Game::strip_name(entity->Name);
+    if (entity->Type == Zeal::GameEnums::Player) {  // By name, in any zone: the spawn id changes on each zone-in.
+      sync_one(saved_player_tags, name, name, entity, info);
+      continue;
+    }
+    const auto key = std::make_pair(zone_id, static_cast<int>(entity->SpawnId));
+    if (entity->Type >= Zeal::GameEnums::NPCCorpse) {  // A kill ends the tag.
+      if (saved_tags.erase(key)) saved_tags_dirty = true;
+      continue;
+    }
+    sync_one(saved_tags, key, name, entity, info);
   }
 
-  const auto expired = std::erase_if(
-      saved_tags, [now](const auto &entry) { return now - entry.second.last_seen > kSavedTagMaxAgeSeconds; });
-  if (expired) saved_tags_dirty = true;
+  auto too_old = [now](const auto &entry) { return now - entry.second.last_seen > kSavedTagMaxAgeSeconds; };
+  if (std::erase_if(saved_tags, too_old) + std::erase_if(saved_player_tags, too_old)) saved_tags_dirty = true;
   if (saved_tags_dirty) write_saved_tags();
 }
 
 void NamePlate::clear_saved_tags_in_zone() {
   const auto *self = Zeal::Game::get_self();
-  if (!self || saved_tags.empty()) return;
+  if (!self || (saved_tags.empty() && saved_player_tags.empty())) return;
   const int zone_id = self->ZoneId;
   std::erase_if(saved_tags, [zone_id](const auto &entry) { return entry.first.first == zone_id; });
+  saved_player_tags.clear();  // Player tags belong to no zone, so a clear takes all of them.
   write_saved_tags();
 }
 
+static constexpr int kSavedPlayerZone = -1;  // The file's zone field for a player tag, matched by name alone.
+
 // File format, one tag per line: zone_id, spawn_id, last_seen (unix time), color (hex), name, text, tab separated.
-// Merged into saved_tags, keeping the newer of any duplicate.
+// A player's line has zone kSavedPlayerZone and spawn id 0. Merged into saved_tags and saved_player_tags,
+// keeping the newer of any duplicate.
 void NamePlate::load_saved_tags(const std::string &filename) {
   std::ifstream file(filename);
   if (!file) return;
@@ -903,7 +922,7 @@ void NamePlate::load_saved_tags(const std::string &filename) {
     const DWORD color = strtoul(fields[3].c_str(), &end, 16);
     if (*end) continue;
 
-    auto &saved = saved_tags[{zone_id, spawn_id}];
+    auto &saved = (zone_id == kSavedPlayerZone) ? saved_player_tags[fields[4]] : saved_tags[{zone_id, spawn_id}];
     if (saved.last_seen >= last_seen) continue;  // This session already has a newer copy.
     saved = {.name = fields[4], .tag_text = fields[5], .tag_color = color, .last_seen = last_seen, .live_seen = false};
   }
@@ -917,10 +936,13 @@ void NamePlate::write_saved_tags() {
   {
     std::ofstream file(temp_filename, std::ios::trunc);
     if (!file) return;
-    file << "# Zeal nameplate tags (zone, spawn_id, last_seen, color, name, text)\n";
+    file << "# Zeal nameplate tags (zone, spawn_id, last_seen, color, name, text; zone -1 is a player, by name)\n";
     for (const auto &[key, tag] : saved_tags)
       file << key.first << '\t' << key.second << '\t' << tag.last_seen << '\t' << std::hex << tag.tag_color << std::dec
            << '\t' << tag.name << '\t' << tag.tag_text << '\n';
+    for (const auto &[name, tag] : saved_player_tags)
+      file << kSavedPlayerZone << "\t0\t" << tag.last_seen << '\t' << std::hex << tag.tag_color << std::dec << '\t'
+           << name << '\t' << tag.tag_text << '\n';
     if (!file) return;
   }
   std::error_code error;

@@ -18,6 +18,9 @@ class NamePlate {
   // Tag persistence: tags survive zoning, a character switch, a device reset and a client crash.
   // Live tags are mirrored into saved_tags (keyed by zone and spawn id) and to a per-character file,
   // and restored onto an entity with the same zone, spawn id and name when it appears again.
+  // Players are kept apart in saved_player_tags, keyed by name alone: a name is unique on the server,
+  // while a player gets a new spawn id every time they zone in, so their tag follows them through
+  // zoning (theirs or yours), a camp and a death.
   //
   // Declared ahead of the settings on purpose: members are constructed in declaration order, and a
   // ZealSetting's constructor runs its change callback, which for the font settings calls clean_ui().
@@ -27,10 +30,12 @@ class NamePlate {
     std::string tag_text;  // Without the trailing newline.
     DWORD tag_color = 0;
     long long last_seen = 0;  // time() the tag was last set or seen live, for expiry.
-    bool live_seen = false;   // Matched to a live entity since the last clean_ui().
+    bool live_seen = false;   // Matched to a live entity since the last clean_ui() (or, for a player, since
+                              // they last left).
   };
 
   std::map<std::pair<int, int>, SavedTag> saved_tags;  // Keyed by {zone id, spawn id}.
+  std::map<std::string, SavedTag> saved_player_tags;   // Keyed by stripped player name, in any zone.
   std::string saved_tags_filename;                     // The character file saved_tags was last loaded from.
   bool saved_tags_dirty = false;
   ULONGLONG saved_tags_next_sync = 0;
