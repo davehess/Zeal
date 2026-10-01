@@ -1,0 +1,89 @@
+# Builds the test-all branch on GitHub and publishes it as ONE rolling prerelease,
+# so a tester can download Zeal.asi + uifiles without Visual Studio on their own PC.
+#
+# Lives only on test-all (the upstream PRs come from the feature branches, so this
+# file never rides into one). Every push to test-all rebuilds and replaces the zip
+# on the `test-all-build` release; the tag moves to the built commit. The tag name
+# differs from the branch name on purpose: a tag and a branch both called test-all
+# make every `git checkout test-all` ambiguous.
+#
+# The build command is the upstream release workflow's (create_release.yml), with
+# zeal_build_version set to testall-<short hash>, so Zeal's options window shows
+# "1.4.8 (testall-abc1234)" and a tester can tell which build they are running.
+
+name: Build test-all
+
+on:
+  push:
+    branches: [test-all]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-test-all
+  cancel-in-progress: true
+
+env:
+  SOLUTION_FILE_PATH: ./Zeal.sln
+  RELEASE_TAG: test-all-build
+
+jobs:
+  build:
+    name: Build and publish the test-all prerelease
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Short hash for the build label
+        id: git
+        shell: bash
+        run: echo "short_hash=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+
+      - name: Build the Zeal solution
+        env:
+          ZEAL_BUILD_VERSION: testall-${{ steps.git.outputs.short_hash }}
+        run: |
+          msbuild /m /p:Configuration=Release /p:Platform=x86 /p:zeal_build_version=$env:ZEAL_BUILD_VERSION /p:LanguageStandard=stdcpp20 $env:SOLUTION_FILE_PATH /p:ExportHeader="" /p:ScanDependencies=""
+
+      - name: Zip the build (same contents as an upstream release)
+        shell: pwsh
+        run: |
+          7z a -tzip zeal_test-all.zip ./Release/Zeal.asi ./Release/Zeal.pdb ./Zeal/uifiles README.md
+          7z rn zeal_test-all.zip README.md Zeal_README.md
+
+      - name: Keep the zip on the run too
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeal_test-all_${{ steps.git.outputs.short_hash }}
+          path: zeal_test-all.zip
+
+      - name: Move the release tag to this commit
+        shell: bash
+        run: |
+          git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$RELEASE_TAG"
+
+      - name: Publish the rolling prerelease
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ env.RELEASE_TAG }}
+          name: test-all (${{ steps.git.outputs.short_hash }})
+          commit: ${{ github.sha }}
+          prerelease: true
+          makeLatest: false
+          allowUpdates: true
+          removeArtifacts: true
+          artifacts: zeal_test-all.zip
+          artifactContentType: application/zip
+          artifactErrorsFailBuild: true
+          body: |
+            Test build of the fork's test-all branch (commit ${{ github.sha }}): the current Zeal release plus the
+            tag shapes, tag persistence, tag corpses and tag pictures branches. Not an official Zeal release.
+            Install: copy Zeal.asi into the EverQuest folder and merge uifiles/ over yours. Zeal's options window
+            shows the build as "testall-${{ steps.git.outputs.short_hash }}".
