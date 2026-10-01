@@ -3,8 +3,9 @@ Zeal tag pictures
 
 A Zeal tag can show a picture in place of its built-in mark:
 
-  ^I<name>^   shows <name>.png (or <name>.tga). Example: ^IEUR^ shows EUR.png.
-              For a guild code it replaces that guild's built-in icon.
+  ^I<name>^   shows <name>.png or I<name>.png (or .tga). Example: ^IEUR^ shows EUR.png
+              or IEUR.png. For a guild code it replaces that guild's built-in icon.
+              (Windows allows no file called CON.png, so use ICON.png for ^ICON^.)
   ^B<code>^   a guild's banner. A picture named B<code>.png replaces it.
               Example: BEUR.png replaces the banner ^BEUR^.
 
@@ -22,15 +23,15 @@ The three folders
                        survive updates. Type /tag icons in game and Zeal creates the folder
                        if it is missing.
 
-  tagicons\templates\  Every guild's built-in icon (<code>.png) and banner (B<code>.png) as a
-                       picture, 160 x 160 with a transparent background. Zeal does not read
+  tagicons\templates\  Every guild's built-in icon (I<code>.png) and banner (B<code>.png) as
+                       a picture, 160 x 160 with a transparent background. Zeal does not read
                        this folder; the files are a starting point.
 
 
 To change a guild's icon or banner
 ----------------------------------
 
-  1. Copy its file from templates\ into custom\ (for example EUR.png or BEUR.png).
+  1. Copy its file from templates\ into custom\ (for example IEUR.png or BEUR.png).
   2. Edit it in any image editor that keeps transparency (PNG, or 32-bit TGA).
   3. In game, type /tag icons. Your picture is used from then on, and the list
      marks it "(yours)".
@@ -43,7 +44,8 @@ To go back to the built-in mark, delete your file from custom\ and type /tag ico
 Rules for a picture
 -------------------
 
-  - The name is 1 to 6 letters or digits, then .png or .tga.
+  - The name is 1 to 6 letters or digits, then .png or .tga. Windows reserves a few names
+    (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9) and no file can use them.
   - At most 512 x 512 pixels and 1 MB.
   - A transparent background, so it floats over the nameplate like the built-in marks.
 
