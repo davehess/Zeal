@@ -125,7 +125,7 @@ class NamePlate {
     std::string tag_text;
     DWORD color;
     DWORD tag_color;
-    std::string tag_image;  // Lower-case code of the tag's picture ("eur" for EUR.png), else empty.
+    std::string tag_image;  // Lower-case key of the tag's picture ("ieur" for EUR.png, "beur" for BEUR.png).
   };
 
   struct RenderInfo {

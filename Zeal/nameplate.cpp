@@ -114,7 +114,11 @@ static int GetGuildIcon(DWORD tag_color) {
 // target ring textures. A picture takes over from a built-in guild icon with the same code. A viewer
 // without the file sees the guild's built-in shape, or only the text for a code that isn't a guild. The
 // folder is read on first use and again on /tag icons, so a picture added while playing needs that command.
+// Pictures that ship with a UI or a Zeal build sit in tagicons, and an update may replace them. A player's
+// own go in tagicons/custom, which nothing ships into, and one there wins over a shipped picture with the
+// same name, so a player can add pictures or replace a shipped one and keep it through updates.
 static constexpr char kTagImageFolder[] = "tagicons";
+static constexpr char kTagImageCustomFolder[] = "custom";  // Inside kTagImageFolder.
 static constexpr size_t kMaxTagImageCode = 6;  // Letters and digits, keeping "^I<code>^" short.
 
 static std::string ToLower(std::string text) {
@@ -122,10 +126,10 @@ static std::string ToLower(std::string text) {
   return text;
 }
 
-static std::map<std::string, std::filesystem::path> ScanTagImages() {
+static std::map<std::string, std::filesystem::path> ScanTagImageFolder(const std::filesystem::path &folder) {
   std::map<std::string, std::filesystem::path> images;  // By lower-case code.
   try {
-    for (const auto &entry : std::filesystem::directory_iterator(UISkin::get_zeal_resources_path() / kTagImageFolder)) {
+    for (const auto &entry : std::filesystem::directory_iterator(folder)) {
       const std::string code = ToLower(entry.path().stem().string());
       const std::string extension = ToLower(entry.path().extension().string());
       if (!entry.is_regular_file() || (extension != ".png" && extension != ".tga") || code.empty() ||
@@ -140,17 +144,35 @@ static std::map<std::string, std::filesystem::path> ScanTagImages() {
   return images;
 }
 
+static std::map<std::string, std::filesystem::path> ScanTagImages() {
+  const auto folder = UISkin::get_zeal_resources_path() / kTagImageFolder;
+  auto images = ScanTagImageFolder(folder);
+  for (const auto &[code, path] : ScanTagImageFolder(folder / kTagImageCustomFolder))
+    images.insert_or_assign(code, path);  // A player's own picture wins over a shipped one.
+  return images;
+}
+
 static const std::map<std::string, std::filesystem::path> &GetTagImages(bool rescan = false) {
   static std::map<std::string, std::filesystem::path> images = ScanTagImages();
   if (rescan) images = ScanTagImages();
   return images;
 }
 
-// Returns the picture file named by an 'I' plus code key ("IEUR" or "ieur"), else nullptr.
+// Returns the picture for a key, else nullptr: 'I' plus a picture's code ("IEUR" uses EUR.png), or a
+// guild's banner key, whose picture is named for the whole key ("BEUR" uses BEUR.png). So EUR.png
+// replaces a guild's built-in icon ^IEUR^ and BEUR.png its banner ^BEUR^.
 static const std::filesystem::path *GetTagImage(const std::string &key) {
-  if (key.size() < 2 || std::tolower(static_cast<unsigned char>(key[0])) != 'i') return nullptr;
+  if (key.size() < 2) return nullptr;
+  const char kind = static_cast<char>(std::tolower(static_cast<unsigned char>(key[0])));
+  std::string code;
+  if (kind == 'i')
+    code = ToLower(key.substr(1));
+  else if (kind == 'b' && TagShapes::GuildIndex(key.substr(1)) >= 0)
+    code = ToLower(key);
+  else
+    return nullptr;
   const auto &images = GetTagImages();
-  const auto it = images.find(ToLower(key.substr(1)));
+  const auto it = images.find(code);
   return (it == images.end()) ? nullptr : &it->second;
 }
 
@@ -708,7 +730,7 @@ void NamePlate::render_ui() {
       auto tag_color = (info.tag_color == TagArrowColor::Nameplate) ? nameplate_color : info.tag_color;
       TagArrows::Shape shape = GetTagShape(info.tag_color);  // From the tag, so no nameplate color can match.
       position.z += sprite_font->get_text_height(full_text) + 1.5f;
-      const auto *image = info.tag_image.empty() ? nullptr : GetTagImage("i" + info.tag_image);
+      const auto *image = info.tag_image.empty() ? nullptr : GetTagImage(info.tag_image);
       if (image && tag_arrows->QueueTagImage(position, image->string())) continue;  // Drawn in place of a shape.
       float bearing = (shape == TagArrows::Shape::Arrow) ? 0.0f : get_bearing(self, entity);
       tag_arrows->QueueTagShape(position, tag_color, shape, bearing);
@@ -1216,16 +1238,24 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   }
 
   if (args.size() == 2 && args[1] == "icons") {
-    const auto &images = GetTagImages(true);     // Reads the folder again, so new pictures count.
-    if (tag_arrows) tag_arrows->ForgetImages();  // And changed pictures are loaded again.
     const auto folder = UISkin::get_zeal_resources_path() / kTagImageFolder;
+    const auto custom = folder / kTagImageCustomFolder;
+    try {
+      std::filesystem::create_directories(custom);  // So a player can see where their own pictures go.
+    } catch (const std::filesystem::filesystem_error &) {
+    }
+    const auto &images = GetTagImages(true);     // Reads the folders again, so new pictures count.
+    if (tag_arrows) tag_arrows->ForgetImages();  // And changed pictures are loaded again.
     Zeal::Game::print_chat("Tag pictures ^I<name>^ from %s (<name>.png or .tga, up to %d letters or digits):",
                            folder.string().c_str(), static_cast<int>(kMaxTagImageCode));
+    Zeal::Game::print_chat("  Your own go in %s; one there replaces a picture with the same name.",
+                           custom.string().c_str());
     if (images.empty()) Zeal::Game::print_chat("  none found");
     std::string line;
     int count = 0;
     for (const auto &[code, path] : images) {
-      line += std::string(line.empty() ? "" : ", ") + path.stem().string();
+      const bool yours = ToLower(path.parent_path().filename().string()) == kTagImageCustomFolder;
+      line += std::string(line.empty() ? "" : ", ") + path.stem().string() + (yours ? " (yours)" : "");
       if (++count % 10 == 0 || count == static_cast<int>(images.size())) {
         Zeal::Game::print_chat("  %s", line.c_str());
         line.clear();
@@ -1511,7 +1541,7 @@ bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_m
     const std::string key = ReadTagKey(tag_text);
     it->second.tag_color = GetTagArrowColor(key);
     const bool image = GetTagImage(key) != nullptr;
-    it->second.tag_image = image ? ToLower(key.substr(1)) : "";
+    it->second.tag_image = image ? ToLower(key) : "";
     if (image && it->second.tag_color == TagArrowColor::Off)
       it->second.tag_color = TagArrowColor::White;  // No built-in shape: a white arrow if the picture won't load.
     tag_text = tag_text.substr(1 + key.size());
