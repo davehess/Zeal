@@ -155,7 +155,7 @@ class NamePlate {
     DWORD color;
     DWORD tag_color;
     bool corpse_tag = false;  // The tag was set on the corpse (tags from before the death stay hidden).
-    std::string tag_image;    // Lower-case code of the tag's picture ("eur" for EUR.png), else empty.
+    std::string tag_image;    // Lower-case key of the tag's picture ("ieur" for EUR.png, "beur" for BEUR.png).
   };
 
   struct RenderInfo {
