@@ -119,7 +119,7 @@ static int GetGuildIcon(DWORD tag_color) {
 // same name, so a player can add pictures or replace a shipped one and keep it through updates.
 static constexpr char kTagImageFolder[] = "tagicons";
 static constexpr char kTagImageCustomFolder[] = "custom";  // Inside kTagImageFolder.
-static constexpr size_t kMaxTagImageCode = 6;  // Letters and digits, keeping "^I<code>^" short.
+static constexpr size_t kMaxTagImageCode = 6;              // Letters and digits, keeping "^I<code>^" short.
 
 static std::string ToLower(std::string text) {
   std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return std::tolower(c); });
