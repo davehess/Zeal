@@ -135,6 +135,8 @@ ___
   - **Description:** Allows you to save and load bandolier sets
     - Works for primary, secondary, range and ammo slots
     - Primary and secondary always swap but range and ammo will not change if you save a set with both of them empty
+    - All bandolier messages go to the Zeal->Bandolier chat filter, so a chat window can take them apart from
+      Other; failed swaps (casting, cursor busy, no empty slot, item not found, etc.) print there in red
     - The item getting swapped out first tries to store in the slot of the swap in item, then in the location
       it was originally swapped in from (if available), then in the preferred bag if there is room, then in
       any inventory bag (starting from last) if there is room, then in a pack slot
@@ -420,7 +422,11 @@ ___
   - **Description:** Shows you your current loot lockouts on supporting servers.
 
 - `/shownames`
-  - **Description:** Default commmand extended to support options 5, 6, and 7.
+  - **Arguments:** `off`, `1` (first only), `2` (first+last), `3` (first+last+guild), `4` (everything), `5` (title+first), `6` (title+first+last), `7` (first+guild) 
+  - **Arguments:** `raid` + any of the above arguments
+  - **Description:** Extends default `/shownames` command to support options 5, 6, and 7. It also adds an optional `raid` mode that sets the
+          `/shownames` mode automatically when joining a raid and then switches back to the normal setting when leaving a raid.
+  - **Example:** `/shownames raid 1` Sets the nameplates of everyone to first name only when joining a raid.
 
 - `/singleclick`
   - **Arguments:** none, `bag #` where 0 disables and 1-8 sets inventory bag #
@@ -628,7 +634,7 @@ Manual editing of the ini file is required to copy from old section to the new s
 
 ## Chat filtering
 - Adds additional chat filtering options under the Zeal submenu that includes things like:
-  - Random, loot, money, Pet chat & damage, Melee specials, Other damage shield, Zeal Spam
+  - Random, loot, money, Pet chat & damage, Melee specials, Other damage shield, Zeal Spam, Bandolier
 - Supports reporting damage taken by NPCs from damage shields and spell damage from other
   players if the 'Others non-melee' option is enabled
   - Spell damage by others is routed to the Spells->Others channel
@@ -680,8 +686,9 @@ Manual editing of the ini file is required to copy from old section to the new s
 - Tagged nameplates have a matching implicit colored arrow added if `Default tag arrow` is set
 - Corpses (NPC and player) can be tagged too. A corpse shows only tags set on it after the death, so a
   kill marker the mob carried does not linger on its corpse
-- Tags can be set with locally or broadcast through rsay, gsay, or a joined chat channel
-  - `/tag <rsay | gsay | chat | local> <tag_text>`
+- Tags can be set locally or broadcast to others through rsay, gsay, or a joined chat channel.
+  - The `rsgs` option will broadcast to rsay if in a raid, else gsay if in a group, else to local (self only). 
+  - `/tag <rsay | gsay | rsgs | chat | local> <tag_text>`
   - Note: % replacement commands (%t, %n) aren't supported in `<tag_text>`
   - A <tag_text> == `clear` will clear the tags of everyone receiving it
   - The <tag_text> message supports special prefixes:
@@ -828,6 +835,22 @@ stream describes a target or pet with only a name and an HP per-mille value.
   - `pet_id` - the spawn id of your pet
 
 `target_id` and `pet_id` are omitted entirely when there is no target or no pet.
+
+#### Target descriptors
+The `player` message also describes the current target, so that a consumer can
+tell apart two spawns that share a name but are backed by different server
+database rows (different level, class or loot). The spawn id alone cannot do
+this, since it identifies a live entity rather than a database row.
+
+- `target_name` - trimmed name, matching what eqtype 28 shows by default
+- `target_type` - 0 player, 1 NPC, 2 NPC corpse, 3 player corpse
+- `target_level`, `target_class`, `target_race` - the client's spawn descriptors
+- `target_loc` - the target's current position, same `{x, y, z}` shape as `location`.
+  Only included while the target is within 250 units of the player; omitted otherwise
+
+These are omitted along with `target_id` when there is no target. `target_name`
+is provided so that a consumer never has to parse eqtype 28, whose text is
+formatting dependent (see `/labels showtargetspawnid`).
 
 ---
 ### Tick Timer
