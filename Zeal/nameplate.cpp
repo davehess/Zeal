@@ -144,36 +144,43 @@ static std::map<std::string, std::filesystem::path> ScanTagImageFolder(const std
   return images;
 }
 
-static std::map<std::string, std::filesystem::path> ScanTagImages() {
+// Pictures by lower-case file name: shipped (tagicons) and the player's own (tagicons/custom).
+struct TagImageSet {
+  std::map<std::string, std::filesystem::path> shipped;
+  std::map<std::string, std::filesystem::path> custom;
+};
+
+static TagImageSet ScanTagImages() {
   const auto folder = UISkin::get_zeal_resources_path() / kTagImageFolder;
-  auto images = ScanTagImageFolder(folder);
-  for (const auto &[code, path] : ScanTagImageFolder(folder / kTagImageCustomFolder))
-    images.insert_or_assign(code, path);  // A player's own picture wins over a shipped one.
-  return images;
+  return {ScanTagImageFolder(folder), ScanTagImageFolder(folder / kTagImageCustomFolder)};
 }
 
-static const std::map<std::string, std::filesystem::path> &GetTagImages(bool rescan = false) {
-  static std::map<std::string, std::filesystem::path> images = ScanTagImages();
+static const TagImageSet &GetTagImages(bool rescan = false) {
+  static TagImageSet images = ScanTagImages();
   if (rescan) images = ScanTagImages();
   return images;
 }
 
-// Returns the picture for a key, else nullptr: 'I' plus a picture's code ("IEUR" uses EUR.png), or a
-// guild's banner key, whose picture is named for the whole key ("BEUR" uses BEUR.png). So EUR.png
-// replaces a guild's built-in icon ^IEUR^ and BEUR.png its banner ^BEUR^.
+// Returns the picture for a key, else nullptr. 'I' plus a code uses <code>.png or the whole key, I<code>.png
+// ("IEUR" uses EUR.png or IEUR.png); the whole-key name also serves a code Windows won't allow as a file
+// name (no file can be called CON.png). A guild's banner key uses the whole key ("BEUR" uses BEUR.png), so
+// a picture can replace a guild's built-in icon ^IEUR^ or its banner ^BEUR^. A player's own picture wins
+// over a shipped one under either name.
 static const std::filesystem::path *GetTagImage(const std::string &key) {
   if (key.size() < 2) return nullptr;
   const char kind = static_cast<char>(std::tolower(static_cast<unsigned char>(key[0])));
-  std::string code;
+  std::vector<std::string> names;
   if (kind == 'i')
-    code = ToLower(key.substr(1));
+    names = {ToLower(key.substr(1)), ToLower(key)};
   else if (kind == 'b' && TagShapes::GuildIndex(key.substr(1)) >= 0)
-    code = ToLower(key);
+    names = {ToLower(key)};
   else
     return nullptr;
   const auto &images = GetTagImages();
-  const auto it = images.find(code);
-  return (it == images.end()) ? nullptr : &it->second;
+  for (const auto *folder : {&images.custom, &images.shipped})
+    for (const auto &name : names)
+      if (const auto it = folder->find(name); it != folder->end()) return &it->second;
+  return nullptr;
 }
 
 // Display name of an icon, numbered or lettered shape (nullptr for the arrows, plain paw and stop sign).
@@ -1244,17 +1251,19 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
       std::filesystem::create_directories(custom);  // So a player can see where their own pictures go.
     } catch (const std::filesystem::filesystem_error &) {
     }
-    const auto &images = GetTagImages(true);     // Reads the folders again, so new pictures count.
+    const auto &set = GetTagImages(true);        // Reads the folders again, so new pictures count.
     if (tag_arrows) tag_arrows->ForgetImages();  // And changed pictures are loaded again.
     Zeal::Game::print_chat("Tag pictures ^I<name>^ from %s (<name>.png or .tga, up to %d letters or digits):",
                            folder.string().c_str(), static_cast<int>(kMaxTagImageCode));
     Zeal::Game::print_chat("  Your own go in %s; one there replaces a picture with the same name.",
                            custom.string().c_str());
+    std::map<std::string, std::filesystem::path> images = set.shipped;  // Listed by name, yours over shipped.
+    for (const auto &[name, path] : set.custom) images.insert_or_assign(name, path);
     if (images.empty()) Zeal::Game::print_chat("  none found");
     std::string line;
     int count = 0;
     for (const auto &[code, path] : images) {
-      const bool yours = ToLower(path.parent_path().filename().string()) == kTagImageCustomFolder;
+      const bool yours = set.custom.count(code) > 0;
       line += std::string(line.empty() ? "" : ", ") + path.stem().string() + (yours ? " (yours)" : "");
       if (++count % 10 == 0 || count == static_cast<int>(images.size())) {
         Zeal::Game::print_chat("  %s", line.c_str());
