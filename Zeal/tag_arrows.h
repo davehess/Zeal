@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "directx.h"
@@ -57,6 +59,14 @@ class TagArrows {
   // and specifies the bottom of the tap shape (e.g. tip of the arrow pointing down).
   void QueueTagShape(const Vec3 &position, const D3DCOLOR color, Shape shape = Shape::Arrow, float bearing = 0.f);
 
+  // Queues a picture from a .png or .tga file, drawn flat and facing the camera (like the nameplate text) with
+  // its bottom edge at the position. Returns false and queues nothing if the file can't be loaded, so the
+  // caller can draw a shape instead. Each file is loaded once and kept until Release() or ForgetImages().
+  bool QueueTagImage(const Vec3 &position, const std::string &filename);
+
+  // Drops the loaded pictures so changed files are read again.
+  void ForgetImages();
+
   // Renders queued arrows to the screen and clears the queue.
   // Note that the D3D stream source, indices, vertex shader, and texture states
   // are not preserved across this call.
@@ -75,6 +85,26 @@ class TagArrows {
     D3DCOLOR color;  // Base color for the vertices.
     Shape shape;     // Shape of the tag.
     float bearing;   // Bearing from player to tag target.
+  };
+
+  // A queued picture and the vertex format it is drawn with.
+  struct Image {
+    Vec3 position;               // Bottom center, in world coordinates.
+    IDirect3DTexture8 *texture;  // Owned by images.
+    float width;                 // In world units (the height is fixed).
+  };
+
+  struct ImageVertex {
+    static constexpr DWORD kFvfCode = (D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1);
+
+    float x, y, z;
+    D3DCOLOR color;
+    float u, v;
+  };
+
+  struct LoadedImage {
+    IDirect3DTexture8 *texture = nullptr;  // nullptr if the file failed to load (so it isn't retried every frame).
+    float aspect = 1.f;                    // Width over height.
   };
 
   struct RenderInfo {
@@ -103,9 +133,13 @@ class TagArrows {
   RenderInfo AllocatePaw(const Arrow &arrow);
   RenderInfo AllocateIconShape(const Arrow &arrow);
   int AppendVertices(std::vector<ArrowVertex> &vertices);
+  LoadedImage ReadImageFile(const std::string &filename);
+  void RenderImages();  // Draws the queued pictures.
 
   IDirect3DDevice8 &device;
   std::vector<Arrow> arrow_queue;  // Loaded to batch up processing in each render pass.
+  std::vector<Image> image_queue;
+  std::unordered_map<std::string, LoadedImage> images;  // By filename.
 
   // Vertex buffer acts as a cache of most recently used shapes (stored in render_infos).
   IDirect3DVertexBuffer8 *vertex_buffer = nullptr;

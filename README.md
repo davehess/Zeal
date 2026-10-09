@@ -708,6 +708,16 @@ Manual editing of the ini file is required to copy from old section to the new s
       - A guild's banner (a flag with its code) or icon: `B` or `I` then the guild's code (e.g. `^BEUR^`,
         `^IMAY^`). `/tag guilds` lists the codes. An unknown code is read as the single letter (`^Blue^`
         is still a blue arrow)
+      - A picture: `I` then the name of a `.png` or `.tga` file in `uifiles/zeal/tagicons` (e.g. `^IEUR^`
+        for `EUR.png`), drawn flat and facing you. Names are 1 to 6 letters or digits; files up to 512
+        pixels a side and 1 MB, with a transparent background. A picture takes over from a guild's
+        built-in icon with the same code (`EUR.png`, or the whole key `IEUR.png`, for `^IEUR^`; Windows
+        allows no file called `CON.png`, so `ICON.png` serves `^ICON^`), and one named for a banner key
+        takes over from that guild's banner (`BEUR.png` for `^BEUR^`). Only players who have the file see the
+        picture; others see the guild's built-in shape, or just the text. Your own pictures go in
+        `uifiles/zeal/tagicons/custom`: nothing installs into it, and a picture there wins over one with the
+        same name in `tagicons`, so it survives updates. `/tag icons` lists the pictures, marks yours,
+        creates the `custom` folder if it is missing and reads both folders again
       - Clear any existing shape: `-`
 - Tags can be cleared with:
   - `/tag clear`: Clears tag from current target if there is a target else all tags
