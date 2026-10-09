@@ -88,6 +88,7 @@
     <ClInclude Include="raid_bars_manage.h" />
     <ClInclude Include="survey.h" />
     <ClInclude Include="tag_arrows.h" />
+    <ClInclude Include="tag_shapes.h" />
     <ClInclude Include="tick.h" />
     <ClInclude Include="triggers.h" />
     <ClInclude Include="ui_buff.h" />
@@ -175,6 +176,7 @@
     <ClCompile Include="raid_bars_manage.cpp" />
     <ClCompile Include="survey.cpp" />
     <ClCompile Include="tag_arrows.cpp" />
+    <ClCompile Include="tag_shapes.cpp" />
     <ClCompile Include="tick.cpp" />
     <ClCompile Include="triggers.cpp" />
     <ClCompile Include="ui_buff.cpp" />

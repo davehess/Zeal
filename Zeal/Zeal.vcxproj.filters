@@ -300,6 +300,9 @@
     <ClInclude Include="tag_arrows.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="tag_shapes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="triggers.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -534,6 +537,9 @@
       <Filter>Source Files\helpers</Filter>
     </ClCompile>
     <ClCompile Include="tag_arrows.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="tag_shapes.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="triggers.cpp">

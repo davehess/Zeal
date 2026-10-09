@@ -157,7 +157,7 @@ void TagArrows::FlushQueueToScreen() {
 
   if (!vertex_buffer) {
     render_infos.clear();
-    if (FAILED(device.CreateVertexBuffer(kBufferVertices * sizeof(ArrowVertex), D3DUSAGE_WRITEONLY | D3DUSAGE_DYNAMIC,
+    if (FAILED(device.CreateVertexBuffer(buffer_vertices * sizeof(ArrowVertex), D3DUSAGE_WRITEONLY | D3DUSAGE_DYNAMIC,
                                          ArrowVertex::kFvfCode, D3DPOOL_DEFAULT, &vertex_buffer))) {
       vertex_buffer = nullptr;  // Ensure nullptr.
       Release();                // Do a full cleanup.
@@ -241,7 +241,7 @@ TagArrows::RenderInfo TagArrows::GetRenderInfo(const Arrow &tag) {
     case Shape::Paw:
       return AllocatePaw(tag);
     default:
-      return RenderInfo();
+      return AllocateIconShape(tag);  // Icon shapes and numbered badges (range checked there).
   }
 }
 
@@ -252,7 +252,7 @@ int TagArrows::AppendVertices(std::vector<ArrowVertex> &vertices) {
     start_vertex_index = render_infos.back().start_vertex_index + render_infos.back().num_vertices;
   }
 
-  if (start_vertex_index + vertices.size() > kBufferVertices) {
+  if (start_vertex_index + vertices.size() > buffer_vertices) {
     start_vertex_index = 0;
     render_infos.clear();  // Flush cache.
   }
@@ -280,6 +280,7 @@ void TagArrows::CalculateShapes() {
   AppendOctagonIndices();
   CalculatePawVertices();
   AppendPawIndices();
+  CalculateIconShapes();
 }
 
 void TagArrows::CalculateArrowVertices() {
@@ -545,6 +546,95 @@ TagArrows::RenderInfo TagArrows::AllocatePaw(const Arrow &tag) {
                                        .num_vertices = paw_vertices.size(),
                                        .start_index = paw_index_start,
                                        .num_primitives = paw_primitive_count,
+                                       .bearing = tag.bearing});
+  return render_infos.back();
+}
+
+void TagArrows::CalculateIconShapes() {
+  buffer_vertices = kBufferVertices;
+  for (size_t i = 0; i < icon_shapes.size(); ++i) {
+    auto &icon = icon_shapes[i];
+    icon.mesh = TagShapes::Build(static_cast<TagShapes::Kind>(i));
+    icon.index_start = indices.size();
+    indices.insert(indices.end(), icon.mesh.indices.begin(), icon.mesh.indices.end());
+    icon.primitive_count = (icon.mesh.indices.size() > 2) ? icon.mesh.indices.size() - 2 : 0;
+    buffer_vertices += icon.mesh.vertices.size();  // Room for every icon shape at once.
+  }
+}
+
+// Lightens a color toward white for the accent parts (the sword's blade, the diamond's facet, etc).
+static D3DCOLOR LightenColor(D3DCOLOR color) {
+  auto lighten = [](int c) { return c + (255 - c) * 3 / 5; };
+  return D3DCOLOR_XRGB(lighten((color >> 16) & 0xFF), lighten((color >> 8) & 0xFF), lighten(color & 0xFF));
+}
+
+// The icon shapes index TagShapes::Kind by their offset from Shape::Skull, so the two enums must line up.
+static_assert(static_cast<int>(TagArrows::Shape::Number1) - static_cast<int>(TagArrows::Shape::Skull) ==
+              static_cast<int>(TagShapes::Kind::Number1));
+static_assert(static_cast<int>(TagArrows::Shape::Glyph0) - static_cast<int>(TagArrows::Shape::Skull) ==
+              static_cast<int>(TagShapes::Kind::Glyph0));
+static_assert(static_cast<int>(TagArrows::Shape::Banner0) - static_cast<int>(TagArrows::Shape::Skull) ==
+              static_cast<int>(TagShapes::Kind::Banner0));
+static_assert(static_cast<int>(TagArrows::Shape::GuildIcon0) - static_cast<int>(TagArrows::Shape::Skull) ==
+              static_cast<int>(TagShapes::Kind::GuildIcon0));
+static_assert(static_cast<int>(TagArrows::Shape::GuildIconLast) - static_cast<int>(TagArrows::Shape::Skull) + 1 ==
+              static_cast<int>(TagShapes::Kind::Count));
+
+static constexpr D3DCOLOR kEyeYellow = D3DCOLOR_XRGB(0xff, 0xcf, 0x5c);  // The Wolf Pack wolf's eyes.
+
+TagArrows::RenderInfo TagArrows::AllocateIconShape(const Arrow &tag) {
+  const int index = static_cast<int>(tag.shape) - static_cast<int>(Shape::Skull);
+  if (index < 0 || index >= static_cast<int>(icon_shapes.size())) return RenderInfo();
+  const auto &icon = icon_shapes[index];
+  if (icon.mesh.vertices.empty() || !icon.primitive_count) return RenderInfo();
+
+  // The same face gradients as the octagon and paw, plus a light and a dark accent tone.
+  const float min_z = icon.mesh.min_z;
+  const float max_z = icon.mesh.max_z;
+  const D3DCOLOR light = LightenColor(tag.color);
+  const D3DCOLOR dark =
+      D3DCOLOR_XRGB(((tag.color >> 16) & 0xFF) / 6, ((tag.color >> 8) & 0xFF) / 6, (tag.color & 0xFF) / 6);
+  Gradient gradient(tag.color, 192, min_z, max_z);
+  Gradient gradient2(tag.color, 64, min_z, max_z, 0.0f, 0.7f);
+  Gradient light_gradient(light, 224, min_z, max_z);
+  Gradient light_gradient2(light, 96, min_z, max_z, 0.0f, 0.7f);
+  // Contrast parts (a badge's digits) take the dark accent on a light tag color, else the light one.
+  const int luminance = static_cast<int>(
+      (((tag.color >> 16) & 0xFF) * 299 + ((tag.color >> 8) & 0xFF) * 587 + (tag.color & 0xFF) * 114) / 1000);
+  const auto contrast = (luminance > 140) ? TagShapes::Tone::Dark : TagShapes::Tone::Light;
+  // Eyes glow a fixed yellow; shaded parts (the moon's craters) are the tag color darkened.
+  Gradient eye_gradient(kEyeYellow, 255, min_z, max_z, 0.55f);
+  Gradient eye_gradient2(kEyeYellow, 160, min_z, max_z, 0.4f);
+  const D3DCOLOR shade = D3DCOLOR_XRGB(((tag.color >> 16) & 0xFF) * 7 / 10, ((tag.color >> 8) & 0xFF) * 7 / 10,
+                                       (tag.color & 0xFF) * 7 / 10);
+  Gradient shade_gradient(shade, 150, min_z, max_z);
+  Gradient shade_gradient2(shade, 50, min_z, max_z, 0.0f, 0.7f);
+
+  std::vector<ArrowVertex> vertices;
+  vertices.reserve(icon.mesh.vertices.size());
+  for (const auto &vertex : icon.mesh.vertices) {
+    const auto tone = (vertex.tone == TagShapes::Tone::Contrast) ? contrast : vertex.tone;
+    D3DCOLOR color = dark;
+    if (tone == TagShapes::Tone::Base)
+      color = vertex.y < 0 ? gradient.GetColor(vertex.z) : gradient2.GetColor(vertex.z);
+    else if (tone == TagShapes::Tone::Light)
+      color = vertex.y < 0 ? light_gradient.GetColor(vertex.z) : light_gradient2.GetColor(vertex.z);
+    else if (tone == TagShapes::Tone::Eye)
+      color = vertex.y < 0 ? eye_gradient.GetColor(vertex.z) : eye_gradient2.GetColor(vertex.z);
+    else if (tone == TagShapes::Tone::Shade)
+      color = vertex.y < 0 ? shade_gradient.GetColor(vertex.z) : shade_gradient2.GetColor(vertex.z);
+    vertices.push_back({.x = vertex.x, .y = vertex.y, .z = vertex.z, .color = color});
+  }
+
+  int start_vertex_index = AppendVertices(vertices);
+  if (start_vertex_index < 0) return RenderInfo();
+
+  render_infos.emplace_back(RenderInfo{.shape = tag.shape,
+                                       .color = tag.color,
+                                       .start_vertex_index = start_vertex_index,
+                                       .num_vertices = vertices.size(),
+                                       .start_index = icon.index_start,
+                                       .num_primitives = icon.primitive_count,
                                        .bearing = tag.bearing});
   return render_infos.back();
 }
