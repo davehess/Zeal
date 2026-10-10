@@ -709,7 +709,7 @@ Manual editing of the ini file is required to copy from old section to the new s
         `^IMAY^`). `/tag guilds` lists the codes. An unknown code is read as the single letter (`^Blue^`
         is still a blue arrow)
       - A picture: `I` then the name of a `.png` or `.tga` file in `uifiles/zeal/tagicons` (e.g. `^IEUR^`
-        for `EUR.png`), drawn flat and facing you. Names are 1 to 6 letters or digits; files up to 512
+        for `EUR.png`), drawn flat and facing you. Names are 1 to 6 letters or digits; files up to 128
         pixels a side and 1 MB, with a transparent background. A picture takes over from a guild's
         built-in icon with the same code (`EUR.png`, or the whole key `IEUR.png`, for `^IEUR^`; Windows
         allows no file called `CON.png`, so `ICON.png` serves `^ICON^`), and one named for a banner key
@@ -727,7 +727,8 @@ Manual editing of the ini file is required to copy from old section to the new s
   - `auto` also draws each nearby player's own guild icon above their nameplate when the player has no tag
     shape of their own. Only for players in a guild listed by `/tag guilds`, within 150 units, who are not
     anonymous or roleplaying. Needs Nameplates Zeal fonts; does not need `/tag on`. The guild is matched by its
-    full name as shown on the nameplate (`/tag guilds` lists them)
+    full name as shown on the nameplate (`/tag guilds` lists them). A guild with a picture file
+    (`<code>.png` or `I<code>.png`) shows the picture instead, which draws faster than a built-in shape
 - Tags can be cleared with:
   - `/tag clear`: Clears tag from current target if there is a target else all tags
   - `/tag local -`: Clears text only from current target locally (can also gsay, rsay, chat)

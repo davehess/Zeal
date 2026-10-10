@@ -126,7 +126,8 @@ class TagArrows {
   void AppendArrowIndices();
   void AppendOctagonIndices();
   void AppendPawIndices();
-  void RenderQueue();                            // Performs the render of all arrows in queue.
+  void FlushQueues();  // Draws the queued pictures and shapes (FlushQueueToScreen prints messages afterwards).
+  void RenderQueue();  // Performs the render of all arrows in queue.
   RenderInfo GetRenderInfo(const Arrow &arrow);  // Returns info to render shape (allocates if needed).
   RenderInfo AllocateArrow(const Arrow &arrow);
   RenderInfo AllocateOctagon(const Arrow &arrow);
@@ -140,6 +141,7 @@ class TagArrows {
   std::vector<Arrow> arrow_queue;  // Loaded to batch up processing in each render pass.
   std::vector<Image> image_queue;
   std::unordered_map<std::string, LoadedImage> images;  // By filename.
+  std::vector<std::string> pending_messages;            // Picture problems, printed after the frame is drawn.
 
   // Vertex buffer acts as a cache of most recently used shapes (stored in render_infos).
   IDirect3DVertexBuffer8 *vertex_buffer = nullptr;
