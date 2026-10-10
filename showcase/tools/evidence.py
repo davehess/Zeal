@@ -16,14 +16,16 @@ def redact(s):
     return s
 
 LINE = re.compile(r"^\[(\w{3} \w{3} +\d+ [\d:]+ \d{4})\] (.*)$")
-CHAN = re.compile(r"^You tell [^,]+:\d+, '(.*)'$")
+# Test channel ("You tell wpzt:1, '...'") or /say ("You say, '...'"); a run made with /say on a new character
+# whose say is refused still works from the /log lines alone.
+CHAN = re.compile(r"^(?:You tell [^,]+:\d+|You say), '(.*)'$")
 LOGT = re.compile(r"^\[(\w+)\] target=(.*?) id=(\S*)\s*$")
 START = re.compile(r"^(\w+): (.*)$")
 
 lines = open(a.log, encoding="latin-1").read().splitlines()
 start = max((i for i, l in enumerate(lines) if "[T0] START" in l), default=None)
 if start is None:
-    sys.exit("no [T0] START in the log — was the JOIN button pressed with /log on?")
+    sys.exit("no [T0] START in the log — was the START (or JOIN) button pressed with /log on?")
 
 ids = [t[0] for t in cfg["tests"]]
 expect = {t[0]: t[2] for t in cfg["tests"]}
@@ -49,13 +51,22 @@ for raw in lines[start:]:
         else:
             cur["notes"].append(body)
         continue
-    if cur is None:
-        continue
     t = LOGT.match(msg)
-    if t and t.group(1) == cur["tid"]:
+    if t and t.group(1) in expect:
+        if cur is None or cur["tid"] != t.group(1) or cur["target"] or cur["id"]:   # no say line before it
+            cur = {"tid": t.group(1), "at": ts, "target": "", "id": "", "result": None, "notes": [], "out": []}
+            runs.setdefault(cur["tid"], []).append(cur)
         cur["target"], cur["id"] = t.group(2), t.group(3)
         continue
-    if msg.startswith("You tell ") or msg.startswith("[T0]"):
+    if cur is None:
+        continue
+    if msg.startswith("[RESULT] "):          # /log [RESULT] PASS|FAIL
+        cur["result"] = "PASS" if msg.startswith("[RESULT] PASS") else "FAIL"
+        continue
+    if msg.startswith("NOTE"):               # /log NOTE what I saw
+        cur["notes"].append(msg[4:].strip())
+        continue
+    if msg.startswith("You tell ") or msg.startswith("You say") or msg.startswith("[T0]"):
         continue
     cur["out"].append(msg)
 
