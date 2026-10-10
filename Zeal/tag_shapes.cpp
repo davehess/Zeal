@@ -475,9 +475,9 @@ std::vector<Part> NumberParts(int number) {
 }
 
 // 5x7 block font for the letters and digits drawn on the pet paw (a charmer's initial), and the guild banners
-// (index 36 is an ampersand, which GlyphIndex does not return). Each row is five bits, most significant on
-// the left, top row first.
-constexpr uint8_t kGlyphRows[37][7] = {
+// (index 36 is an ampersand and 37 a hyphen, which GlyphIndex does not return). Each row is five bits, most
+// significant on the left, top row first.
+constexpr uint8_t kGlyphRows[38][7] = {
     {14, 17, 19, 21, 25, 17, 14}, {4, 12, 4, 4, 4, 4, 14},      {14, 17, 1, 2, 4, 8, 31},      // 0 1 2
     {31, 2, 4, 2, 1, 17, 14},     {2, 6, 10, 18, 31, 2, 2},     {31, 16, 30, 1, 1, 17, 14},    // 3 4 5
     {6, 8, 16, 30, 17, 17, 14},   {31, 1, 2, 4, 8, 8, 8},       {14, 17, 17, 14, 17, 17, 14},  // 6 7 8
@@ -490,7 +490,7 @@ constexpr uint8_t kGlyphRows[37][7] = {
     {30, 17, 17, 30, 20, 18, 17}, {15, 16, 16, 14, 1, 1, 30},   {31, 4, 4, 4, 4, 4, 4},        // R S T
     {17, 17, 17, 17, 17, 17, 14}, {17, 17, 17, 17, 17, 10, 4},  {17, 17, 17, 21, 21, 21, 10},  // U V W
     {17, 17, 10, 4, 10, 17, 17},  {17, 17, 17, 10, 4, 4, 4},    {31, 1, 2, 4, 8, 16, 31},      // X Y Z
-    {12, 18, 20, 8, 21, 18, 13}};                                                              // & (banner names only)
+    {12, 18, 20, 8, 21, 18, 13}, {0, 0, 0, 14, 0, 0, 0}};                                     // & -
 
 // A 5x7 glyph with its top left corner at (x0, z_top), `cell` per font cell, standing `proud` out of each
 // face. Runs of lit cells become rectangles, and a run repeated on the rows below grows into one taller
@@ -718,7 +718,7 @@ float TextCells(const std::string &text) {
   return cells;
 }
 
-int TextGlyph(char c) { return (c == '&') ? 36 : GlyphIndex(c); }
+int TextGlyph(char c) { return (c == '&') ? 36 : (c == '-') ? 37 : GlyphIndex(c); }
 
 // Draws a line of text with its top left corner at (x0, z_top), in the banner's text color, mirrored on the back.
 void AppendText(std::vector<Part> &parts, const std::string &text, float x0, float z_top, float cell) {
@@ -790,7 +790,9 @@ bool ChooseNameLines(const std::string &code, const std::string &name, NameLines
     const char *code;
     std::vector<std::string> above, below;
   };
-  static const Chosen kChosen[] = {{"HBM", {"HERE", "THERE"}, {"BE", "MONSTERS"}}};
+  static const Chosen kChosen[] = {{"HBM", {"HERE", "THERE"}, {"BE", "MONSTERS"}},
+                                   {"INT", {}, {"INTER-", "VENTION"}},
+                                   {"TRQ", {}, {"TRANQ-", "UILITY"}}};
   for (const auto &chosen : kChosen)
     if (code == chosen.code) {
       NameLines layout;
