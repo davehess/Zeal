@@ -1421,11 +1421,12 @@ static void RemoveTagTextField(const std::string &field_text, std::string &tag_t
 }
 
 // Returns the tag color of the icon of a player's own guild (auto mode), else TagArrowColor::Off. Players that
-// are anonymous or roleplaying, far away, or in a guild that is not in kGuilds get nothing.
+// are anonymous, far away, or in a guild that is not in kGuilds get nothing. Roleplaying players still show their
+// guild on the nameplate (only anonymous hides it), so they get a mark too.
 DWORD NamePlate::get_auto_guild_mark(const Zeal::GameStructures::Entity &entity,
                                      const Zeal::GameStructures::Entity *self) {
   static constexpr float kMaxGuildMarkDist = 150.f;
-  if (!self || entity.Type != Zeal::GameEnums::Player || entity.GuildId == -1 || entity.AnonymousState != 0)
+  if (!self || entity.Type != Zeal::GameEnums::Player || entity.GuildId == -1 || entity.AnonymousState == 1)
     return TagArrowColor::Off;
   const float dx = entity.Position.x - self->Position.x;
   const float dy = entity.Position.y - self->Position.y;
