@@ -1,0 +1,10 @@
+{
+  "caption": "Tags survive a crash, a relog and a character switch",
+  "steps": [
+    { "label": "Tag a mob", "sub": "/tag rsay ^K^Kill" },
+    { "label": "Saved to a file", "sub": "<character>_tags.txt, about once a second", "hot": true },
+    { "label": "Crash, relog or switch", "sub": "the game forgets everything in memory" },
+    { "label": "Mob appears again", "sub": "same zone, same spawn id, same name" },
+    { "label": "Tag is back", "sub": "dropped only on clear, corpse or after 3 hours", "hot": true }
+  ]
+}

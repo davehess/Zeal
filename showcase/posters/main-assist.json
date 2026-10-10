@@ -1,0 +1,15 @@
+{
+  "order": 8,
+  "title": "Main assist marker and %tid",
+  "pitch": "Crossed swords over the main assist, and a code for the target's spawn id.",
+  "image": "main-assist/mainassist-swords.png",
+  "bullets": [
+    "^MA^ marks one main assist at a time; /target ^MA^ then /assist",
+    "%tid in /pipe, /log and macros gives the target's spawn id",
+    "/target <tag text> tries tags first, then the game's own /target"
+  ],
+  "try": "not in the test-all build yet (local draft branch, needs a build)",
+  "status": "draft",
+  "pr_url": "",
+  "branch": "ma-draft (local)"
+}

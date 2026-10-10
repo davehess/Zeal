@@ -1,0 +1,10 @@
+{
+  "caption": "A mouse arrow while the UI is hidden (F10)",
+  "steps": [
+    { "label": "Press F10", "sub": "the whole UI hides" },
+    { "label": "The game draws no cursor", "sub": "but the mouse still works" },
+    { "label": "Zeal draws one", "sub": "white arrow, black outline, tip on the click point", "hot": true },
+    { "label": "Click mobs as usual", "sub": "gone while mouse-looking or alt-tabbed" },
+    { "label": "/uicursor", "sub": "on or off, remembered between sessions" }
+  ]
+}

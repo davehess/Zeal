@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Showcase diagram template</title>
+<!-- For changes with no in-game screenshot: a row of labelled steps. Rendered to <change>/diagram.png by
+     render-posters.js from <change>/diagram.json. It is a diagram, never a screenshot, and says so. -->
+<style>
+  :root { --bg:#0e1013; --card:#1b2028; --ink:#eceef1; --mute:#a3abb5; --gold:#e0b04a; --line:#2b313a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { background:var(--bg); color:var(--ink); font-family:"Segoe UI","DejaVu Sans",Arial,sans-serif; }
+  #d { width:1200px; height:400px; padding:34px 36px 26px; display:flex; flex-direction:column; gap:22px; }
+  .cap { color:var(--gold); font-weight:700; letter-spacing:.1em; text-transform:uppercase; font-size:20px; }
+  .row { flex:1; display:flex; align-items:stretch; gap:0; }
+  .step { flex:1; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 16px;
+    display:flex; flex-direction:column; gap:10px; justify-content:center; text-align:center; }
+  .step b { font-size:25px; line-height:1.15; }
+  .step span { font-size:19px; color:var(--mute); line-height:1.25; }
+  .step.hot { border-color:var(--gold); }
+  .step .n { color:var(--gold); font-weight:800; font-size:18px; }
+  .arrow { width:34px; display:flex; align-items:center; justify-content:center; color:var(--gold); font-size:30px; }
+  .note { color:var(--mute); font-size:16px; }
+  /* mini: big labels only, for posters and banners that scale the picture down */
+  #m { width:800px; height:500px; padding:26px 30px; display:flex; flex-direction:column; justify-content:center; gap:10px; }
+  .mrow { display:flex; align-items:center; gap:18px; background:var(--card); border:1px solid var(--line);
+    border-radius:10px; padding:0 18px; flex:1; font-size:36px; font-weight:700; line-height:1.1; }
+  .mrow.hot { border-color:var(--gold); }
+  .mrow i { font-style:normal; color:var(--gold); font-weight:800; font-size:30px; width:30px; }
+</style></head><body>
+<div id="d"></div><div id="m" style="display:none"></div>
+<script>
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+  window.renderDiagram = function (data) {
+    const steps = (data.steps || []).map((s, i) =>
+      (i ? '<div class="arrow">&#9656;</div>' : "") +
+      '<div class="step' + (s.hot ? " hot" : "") + '"><div class="n">' + (i + 1) + "</div><b>" + esc(s.label) +
+      "</b><span>" + esc(s.sub) + "</span></div>").join("");
+    document.getElementById("m").style.display = "none";
+    document.getElementById("d").style.display = "flex";
+    document.getElementById("d").innerHTML = '<div class="cap">' + esc(data.caption) + '</div><div class="row">' +
+      steps + '</div><div class="note">Diagram, not an in-game screenshot.</div>';
+    return true;
+  };
+  window.renderMini = function (data) {
+    document.getElementById("d").style.display = "none";
+    const m = document.getElementById("m");
+    m.style.display = "flex";
+    m.innerHTML = (data.steps || []).map((s, i) => '<div class="mrow' + (s.hot ? " hot" : "") + '"><i>' + (i + 1) +
+      "</i><span>" + esc(s.short || s.label) + "</span></div>").join("");
+    return true;
+  };
+</script></body></html>

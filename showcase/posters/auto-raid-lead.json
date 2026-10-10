@@ -1,0 +1,15 @@
+{
+  "order": 10,
+  "title": "Raid lead by password",
+  "pitch": "/autoraidinvite now survives a restart, and /autoraidlead hands over raid lead.",
+  "image": "auto-raid-lead/diagram-mini.png",
+  "bullets": [
+    "Passwords saved per character in zeal.ini and checked as plain text",
+    "Handoff only if you lead, the sender is in your raid, once per 10 s",
+    "Draft: not compiled, needs a two-person raid test"
+  ],
+  "try": "not in the test-all build yet (local draft branch, needs a build)",
+  "status": "draft",
+  "pr_url": "",
+  "branch": "raidlead-draft (local)"
+}

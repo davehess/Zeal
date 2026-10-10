@@ -1,0 +1,15 @@
+{
+  "order": 1,
+  "title": "Tag icons, numbers and guild marks",
+  "pitch": "Skulls, a wolf, numbered badges 1-12, a paw with your initial, and a banner and icon for 30 guilds.",
+  "image": "tag-shapes/preview.png",
+  "bullets": [
+    "Twelve new symbols plus the wolf, from ^K^ skull to ^E^ euro",
+    "Badges ^1^ to ^12^ for kill and crowd-control order; ^PK^ paw with a K",
+    "^B<code>^ banner and ^I<code>^ icon for each guild; /tag guilds lists them"
+  ],
+  "try": "test-all build at github.com/davehess/Zeal/releases/tag/test-all-build",
+  "status": "draft",
+  "pr_url": "",
+  "branch": "tag-shapes"
+}

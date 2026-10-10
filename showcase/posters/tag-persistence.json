@@ -1,0 +1,15 @@
+{
+  "order": 2,
+  "title": "Tags that survive a crash",
+  "pitch": "Relog, crash or switch characters and your raid marks are still on the mobs.",
+  "image": "tag-persistence/diagram-mini.png",
+  "bullets": [
+    "Saved per character, restored when the same mob appears again",
+    "Tagged players keep their tag by name, even after zoning",
+    "Tags from another zone no longer land on the wrong mob"
+  ],
+  "try": "test-all build at github.com/davehess/Zeal/releases/tag/test-all-build",
+  "status": "draft",
+  "pr_url": "",
+  "branch": "tag-persistence"
+}

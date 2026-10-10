@@ -1,0 +1,15 @@
+{
+  "order": 3,
+  "title": "Tag the corpse",
+  "pitch": "Mark loot order or a rez on a corpse, without the kill mark lingering on it.",
+  "image": "tag-corpses/diagram-mini.png",
+  "bullets": [
+    "NPC and player corpses take a tag",
+    "A skull put on a live mob is not left on its corpse",
+    "/tag target finds a corpse by the tag set on the corpse"
+  ],
+  "try": "test-all build at github.com/davehess/Zeal/releases/tag/test-all-build",
+  "status": "draft",
+  "pr_url": "",
+  "branch": "tag-corpses"
+}

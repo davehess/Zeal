@@ -1,0 +1,10 @@
+{
+  "caption": "Your own picture over a mob, no Zeal release needed",
+  "steps": [
+    { "label": "Drop a file", "sub": "EUR.png in uifiles/zeal/tagicons (or its custom folder)" },
+    { "label": "Checked first", "sub": "PNG or TGA, 1 MB or less, 128 px a side or less" },
+    { "label": "/tag icons", "sub": "lists what was found and rescans the folder", "hot": true },
+    { "label": "/tag local ^IEUR^Europa", "sub": "the picture floats above the mob and faces you" },
+    { "label": "Bad or missing file", "sub": "the built-in shape (or a white arrow) is drawn instead" }
+  ]
+}

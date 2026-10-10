@@ -1,0 +1,15 @@
+{
+  "order": 11,
+  "title": "Guild icons and banners, round two",
+  "pitch": "Banners that carry each guild's logo and name. Work in progress.",
+  "image": "guild-icon-refresh/burnouts-cigarette.png",
+  "bullets": [
+    "Logo parts coloured to contrast with each guild's flag",
+    "Burnouts: a lit rolled cigarette replaces the match",
+    "Placeholder until the branch is committed and built"
+  ],
+  "try": "not in the test-all build yet (local draft branch, needs a build)",
+  "status": "draft",
+  "pr_url": "",
+  "branch": "guildicon-draft (local)"
+}

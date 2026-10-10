@@ -1,0 +1,10 @@
+{
+  "caption": "Same name, different mobs: the pipe now says which one",
+  "steps": [
+    { "label": "Three mobs, one name", "sub": "a Shik'nar Forager x3" },
+    { "label": "Before 1.4.6", "sub": "name and HP only, so they look identical" },
+    { "label": "spawn_id on the pipe", "sub": "self, target, pet, raid and group members", "hot": true },
+    { "label": "Tools can tell them apart", "sub": "12 different ids seen in one 3 minute window" },
+    { "label": "Shipped in Zeal 1.4.6", "sub": "upstream PR 229, merged" }
+  ]
+}

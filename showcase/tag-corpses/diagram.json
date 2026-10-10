@@ -1,0 +1,10 @@
+{
+  "caption": "Corpses can be tagged; a kill mark never lingers on the body",
+  "steps": [
+    { "label": "Live mob tagged", "sub": "^K^ skull while it is alive" },
+    { "label": "Mob dies", "sub": "the skull does not follow it onto the corpse" },
+    { "label": "Tag the corpse", "sub": "/tag local ^PL^Loot", "hot": true },
+    { "label": "Players too", "sub": "/tag local ^H^Rez me on a player corpse" },
+    { "label": "Find it again", "sub": "/tag target Loot targets that corpse", "hot": true }
+  ]
+}

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Showcase poster template</title>
+<!-- One template, two sizes. render-posters.js calls window.render(data, mode) with a poster JSON and
+     mode = "poster" (1200x675) or "banner" (1280x320). Nothing here is specific to one change. -->
+<style>
+  :root { --bg:#14171c; --panel:#0e1013; --ink:#eceef1; --mute:#a3abb5; --gold:#e0b04a; --line:#2b313a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI","DejaVu Sans",Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  #stage { position:relative; overflow:hidden; background:var(--bg); }
+  #stage::before { content:""; position:absolute; left:0; top:0; bottom:0; width:10px; background:var(--gold); }
+  .pill { display:inline-block; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    border:2px solid var(--gold); color:var(--gold); border-radius:999px; }
+  .pill.merged { background:var(--gold); color:#14171c; }
+  .shot { background:var(--panel); border:1px solid var(--line); border-radius:12px; display:flex;
+    align-items:center; justify-content:center; overflow:hidden; }
+  .shot img { max-width:100%; max-height:100%; object-fit:contain; display:block; }
+  h1 { font-weight:800; line-height:1.08; }
+  .pitch { color:var(--mute); line-height:1.3; }
+  .kicker { color:var(--gold); font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+
+  /* poster 1200x675 */
+  #stage.poster { width:1200px; height:675px; padding:48px 56px 40px 64px; display:grid;
+    grid-template-columns: 1fr 470px; grid-template-rows:auto minmax(0,1fr) auto; column-gap:44px; row-gap:18px; }
+  .poster .top { grid-column:1 / 3; display:flex; justify-content:space-between; align-items:center; }
+  .poster .kicker { font-size:20px; }
+  .poster .pill { font-size:17px; padding:5px 16px; }
+  .poster .main { display:flex; flex-direction:column; justify-content:center; gap:14px; min-height:0; }
+  .poster h1 { font-size:52px; }
+  .poster .pitch { font-size:26px; }
+  .poster ul { list-style:none; display:flex; flex-direction:column; gap:10px; margin-top:6px; }
+  .poster li { font-size:22px; line-height:1.25; padding-left:30px; position:relative; }
+  .poster li::before { content:""; position:absolute; left:0; top:.5em; width:12px; height:12px;
+    background:var(--gold); transform:rotate(45deg); }
+  .poster .shot { align-self:center; height:400px; padding:14px; }
+  .poster .foot { grid-column:1 / 3; border-top:1px solid var(--line); padding-top:14px; font-size:21px;
+    color:var(--mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .poster .foot b { color:var(--gold); }
+
+  /* banner 1280x320 */
+  #stage.banner { width:1280px; height:320px; padding:30px 40px 30px 50px; display:grid;
+    grid-template-columns: 1fr 500px; column-gap:36px; }
+  .banner .main { display:flex; flex-direction:column; justify-content:center; gap:14px; min-width:0; }
+  .banner .kicker { font-size:22px; display:flex; align-items:center; gap:16px; }
+  .banner h1 { font-size:56px; }
+  .banner .pitch { font-size:28px; }
+  .banner .pill { font-size:17px; padding:3px 14px; letter-spacing:.1em; }
+  .banner .shot { height:260px; align-self:center; padding:8px; }
+  .banner ul, .banner .foot, .banner .top { display:none; }
+</style></head>
+<body>
+<div id="stage"></div>
+<script>
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+  // data: {title, pitch, image, bullets[3], try, status: draft|filed|merged, pr_url}
+  window.render = async function (data, mode) {
+    const stage = document.getElementById("stage");
+    stage.className = mode;
+    const filed = data.status === "filed" || data.status === "merged";
+    const pill = filed ? '<span class="pill ' + esc(data.status) + '">' + esc(data.status) + "</span>" : "";
+    const kicker = "Wolf Pack &middot; Zeal fork";
+    const img = data.image ? '<img id="shot" src="' + esc(data.image) + '" alt="">' : "";
+    const bullets = (data.bullets || []).map(b => "<li>" + esc(b) + "</li>").join("");
+    stage.innerHTML = mode === "banner"
+      ? '<div class="main"><div class="kicker">' + kicker + pill + "</div><h1>" + esc(data.title) +
+        '</h1><div class="pitch">' + esc(data.pitch) + '</div></div><div class="shot">' + img + "</div>"
+      : '<div class="top"><div class="kicker">' + kicker + "</div>" + pill + '</div>' +
+        '<div class="main"><h1>' + esc(data.title) + '</h1><div class="pitch">' + esc(data.pitch) +
+        "</div><ul>" + bullets + '</ul></div><div class="shot">' + img + "</div>" +
+        '<div class="foot"><b>Try it:</b> ' + esc(data.try) + "</div>";
+    const el = document.getElementById("shot");
+    if (el) await el.decode().catch(() => {});
+    return true;
+  };
+</script>
+</body></html>

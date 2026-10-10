@@ -1,0 +1,15 @@
+{
+  "order": 4,
+  "title": "Your own tag pictures",
+  "pitch": "Drop a PNG or TGA in a folder and use it as a tag, like target rings.",
+  "image": "tag-icon-files/diagram-mini.png",
+  "bullets": [
+    "^I<name>^ draws uifiles/zeal/tagicons/<name>.png over the mob",
+    "Files are size and format checked before they load; bad ones fall back",
+    "A custom folder survives UI and Zeal updates"
+  ],
+  "try": "test-all build at github.com/davehess/Zeal/releases/tag/test-all-build",
+  "status": "draft",
+  "pr_url": "",
+  "branch": "tag-icon-files"
+}

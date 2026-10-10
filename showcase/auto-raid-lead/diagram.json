@@ -1,0 +1,10 @@
+{
+  "caption": "Raid lead handoff by password (draft, not yet tested)",
+  "steps": [
+    { "label": "Leader sets it once", "sub": "/arl <password>, saved per character" },
+    { "label": "A raid member tells the leader", "sub": "the whole message is the password" },
+    { "label": "Checks pass?", "sub": "you lead, sender is in your raid, 10 s since the last", "hot": true },
+    { "label": "Same request as Make Leader", "sub": "the server still decides" },
+    { "label": "Any check fails", "sub": "one local chat line, nothing sent, no crash" }
+  ]
+}

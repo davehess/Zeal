@@ -1,0 +1,15 @@
+{
+  "order": 7,
+  "title": "Spawn ids on the Zeal pipe",
+  "pitch": "Tools can now tell two mobs with the same name apart.",
+  "image": "spawn-id/diagram-mini.png",
+  "bullets": [
+    "spawn_id for you, target, pet, raid and group members",
+    "Found and fixed a pet_id of -1 with no pet during a live run",
+    "Shipped in official Zeal 1.4.6"
+  ],
+  "try": "already in Zeal 1.4.6 and later, so every build above carries it",
+  "status": "merged",
+  "pr_url": "https://github.com/CoastalRedwood/Zeal/pull/229",
+  "branch": "merged upstream (1.4.6)"
+}

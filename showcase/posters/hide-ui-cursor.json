@@ -1,0 +1,15 @@
+{
+  "order": 5,
+  "title": "A cursor with the UI hidden",
+  "pitch": "Press F10 and still see your mouse, so you can still click mobs.",
+  "image": "hide-ui-cursor/diagram-mini.png",
+  "bullets": [
+    "White arrow with a black outline, tip on the click point",
+    "Hidden while mouse-looking or when EverQuest is in the background",
+    "/uicursor on or off; on by default"
+  ],
+  "try": "test-all build at github.com/davehess/Zeal/releases/tag/test-all-build",
+  "status": "draft",
+  "pr_url": "",
+  "branch": "hide-ui-cursor"
+}
