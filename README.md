@@ -119,9 +119,29 @@ ___
 
 - `/autoraidinvite`
   - **Aliases:** `/ari`
-  - **Arguments:** `<password>` (enables), `off` (disables)
-  - **Description:** When enabled, will automatically invite a player to raid if they send a tell with an exact match
-    to the password.
+  - **Arguments:** `<password>` (enables), `clear` (disables, `off` also works), none (shows status)
+  - **Description:** When enabled, will automatically invite a player to raid if they send a tell whose entire
+    message is exactly the password (plain, case-sensitive compare). The password is saved per character in
+    `zeal.ini` (`[Zeal_<Character>]`, key `AutoRaidInvite`) and restored at login. Status and chat lines show only
+    the first character of the password. `clear` and `off` cannot be used as passwords.
+
+- `/autoraidlead`
+  - **Aliases:** `/arl`
+  - **Arguments:** `<password>` (enables), `clear` (disables, `off` also works), `give <name>`, none (shows status)
+  - **Description:** When enabled and you are the raid leader, a tell from a raid member whose entire message is
+    exactly the password (plain, case-sensitive compare) hands raid leadership to that member, using the same
+    request the raid window's Make Leader button sends. The password is saved per character in `zeal.ini`
+    (`[Zeal_<Character>]`, key `AutoRaidLead`) and restored at login. `clear`, `off` and `give` cannot be used as
+    passwords. Safety rules:
+    - Does nothing unless you are the raid leader and the sender is a member of your raid (a local chat line says
+      "ARL: not raid leader, ignored" and so on). No password set means the feature is off.
+    - At most one handoff every 10 seconds.
+    - Without the password, a raid member can send the tell `raidlead`. If you have a password set and are the
+      leader, you get the local line "<name> asks for raid lead - /arl give <name> to hand it over".
+      Nothing happens until you run `/arl give <name>`.
+    - `/arl give <name>` only works if you are the raid leader and the name is another raid member.
+    - The password is stored in plain text in `zeal.ini` and anyone who has it can take the raid lead from you
+      while you are leader, so use a throwaway word and share it only with the people you would hand the raid to.
 
 - `/autoinventory`
   - **Aliases:** `/autoinv`, `/ai`
@@ -916,6 +936,15 @@ this, since it identifies a live entity rather than a database row.
 These are omitted along with `target_id` when there is no target. `target_name`
 is provided so that a consumer never has to parse eqtype 28, whose text is
 formatting dependent (see `/labels showtargetspawnid`).
+
+#### Raid leader and auto raid invite / lead
+- The raid leader is already in the `raid` (type 5) message: each member has a `rank` of `Raid Leader`,
+  `Group Leader` or empty. A consumer can watch for the `Raid Leader` row change, so there is no separate
+  leader message.
+- `/autoraidinvite` and `/autoraidlead` send a `custom` message (the same kind `/pipe` sends, `{"text": "..."}`)
+  when the setting changes, when it is restored at login, and when the command is run with no arguments:
+  - `ARI set <password>` / `ARI clear`
+  - `ARL on` / `ARL off` (the `/autoraidlead` password is never sent over the pipe)
 
 ---
 ### Tick Timer

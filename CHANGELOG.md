@@ -22,6 +22,24 @@ Summarizes notable changes to Zeal
 
 * Added a slow tag shape `^SLOW^`: an hourglass
 
+* `/autoraidinvite` (`/ari`) is now saved per character in `zeal.ini` (key `AutoRaidInvite`) and restored at login
+  instead of resetting when the client restarts. Added `/ari clear` (`off` still works) and `/ari` alone shows the
+  status with the password masked
+
+* Added `/autoraidlead <password>` (`/arl`), also saved per character (key `AutoRaidLead`). When you are the raid
+  leader, a tell from a raid member that is exactly the password hands raid leadership to them. `/arl clear` disables,
+  `/arl` shows status (password masked), and `/arl give <name>` hands over raid lead by hand. A raid member who
+  sends the tell `raidlead` gets a local prompt for the leader to use `/arl give`. Ignored unless you are the raid
+  leader and the sender is in your raid, with at most one handoff every 10 seconds
+
+* Named pipe `custom` messages now announce `ARI set <password>` / `ARI clear` and `ARL on` / `ARL off` (never the
+  ARL password). The raid leader is already in the raid message as `rank` `Raid Leader`
+
+### Bug fixes
+
+* `/autoraidinvite` no longer builds a regular expression from the password, so passwords containing characters such
+  as `(`, `[` or `.` match only themselves and the whole message must equal the password
+
 
 ## [1.4.8] - 2026/10/01
 

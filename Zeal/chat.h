@@ -18,6 +18,17 @@ class Chat {
   ZealSetting<bool> EnableAutoConsent = {false, "Zeal", "AutoConsent", false};
   ZealSetting<int> UseAbbreviatedChat = {0, "Zeal", "AbbreviatedChat", false};
   ZealSetting<int> TimeStampsStyle = {0, "Zeal", "ChatTimestamps", false};
+  // Per-character passwords for /autoraidinvite and /autoraidlead, kept in zeal.ini and restored at login.
+  ZealSetting<std::string> AutoRaidInvitePassword = {
+      std::string(), "Zeal", "AutoRaidInvite", true,
+      [](const std::string &password) { Chat::NotifyAutoRaidInvite(password); }};
+  ZealSetting<std::string> AutoRaidLeadPassword = {
+      std::string(), "Zeal", "AutoRaidLead", true,
+      [](const std::string &password) { Chat::NotifyAutoRaidLead(password); }};
+
+  // Named pipe notices ("ARI set <password>", "ARI clear", "ARL on", "ARL off"). Never sends the ARL password.
+  static void NotifyAutoRaidInvite(const std::string &password);
+  static void NotifyAutoRaidLead(const std::string &password);
 
   std::function<unsigned int(int)> get_color_callback;
 
