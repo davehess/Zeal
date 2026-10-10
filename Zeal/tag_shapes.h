@@ -33,6 +33,10 @@ extern const Guild kGuilds[kGuildCount];
 // Returns the index in kGuilds of a guild code (either case), else -1.
 int GuildIndex(const std::string &code);
 
+// Returns the index in kGuilds of a guild by its full name, comparing letters and digits only and ignoring
+// case ("loot some fun" and "Loot & Some Fun" match), else -1.
+int GuildIndexByName(const std::string &name);
+
 enum class Kind {
   Skull = 0,
   Cross,
