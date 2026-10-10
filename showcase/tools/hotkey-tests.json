@@ -1,5 +1,5 @@
 {
- "build": "test-all 67bea01",
+ "build": "test-all 035d8a3",
  "channel": "wpzt:zt10",
  "changes": {
   "TS": [
@@ -45,6 +45,10 @@
   "PF": [
    "zeal-popflags-export",
    "PoP flags export on camp"
+  ],
+  "SI": [
+   "zeal-spell-id-tooltip",
+   "Spell id in spell info"
   ]
  },
  "tests": [
@@ -542,6 +546,30 @@
    "PF4 camp",
    "Export on /camp ON; at next camp PoPFlags updates",
    []
+  ],
+  [
+   "SI1",
+   "SI1 on",
+   "Alt+click a buff: last line 'Spell ID: <id>'",
+   [
+    "/spellid on"
+   ]
+  ],
+  [
+   "SI2",
+   "SI2 off",
+   "Alt+click the buff again: no Spell ID line",
+   [
+    "/spellid off"
+   ]
+  ],
+  [
+   "SI3",
+   "SI3 bad",
+   "chat: Usage: /spellid [on|off]; setting unchanged",
+   [
+    "/spellid maybe"
+   ]
   ],
   [
    "T9",

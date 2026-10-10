@@ -1,0 +1,9 @@
+{
+  "caption": "The spell id at the bottom of the spell info window",
+  "steps": [
+    { "label": "/spellid on", "sub": "once; it is remembered" },
+    { "label": "Alt+click a buff or spell", "sub": "buff window, spell gem, spellbook" },
+    { "label": "Spell ID: 1546", "sub": "the last line of the window", "hot": true },
+    { "label": "Block or track it by id", "sub": "no database search needed" }
+  ]
+}

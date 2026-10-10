@@ -1,0 +1,15 @@
+{
+  "order": 13,
+  "title": "Spell id in spell info",
+  "pitch": "Alt+click a buff and see its spell id, ready to block or track.",
+  "image": "spell-id-tooltip/diagram-mini.png",
+  "bullets": [
+    "/spellid on adds a \"Spell ID\" line",
+    "Buff window, spell gems and spellbook",
+    "Off until you turn it on"
+  ],
+  "try": "test-all build at github.com/davehess/Zeal/releases/tag/test-all-build",
+  "status": "draft",
+  "pr_url": "",
+  "branch": "spell-id-tooltip"
+}
