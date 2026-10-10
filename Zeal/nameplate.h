@@ -168,7 +168,7 @@ class NamePlate {
     DWORD color;
     DWORD tag_color;
     bool corpse_tag = false;  // The tag was set on the corpse (tags from before the death stay hidden).
-    bool guild_mark = false;  // The tag_color came from a guild banner or icon key (^B..^, ^I..^).
+    bool guild_mark = false;  // The tag_color came from a guild banner or icon key (^F..^, ^I..^).
   };
 
   struct RenderInfo {

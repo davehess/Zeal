@@ -16,6 +16,16 @@ Summarizes notable changes to Zeal
 * A received tag now applies only if the target name in it matches the mob with that spawn id, so
   a tag sent from another zone no longer lands on an unrelated mob
 
+* Added more tag shapes
+  - Icon shapes: `^K^` skull, `^X^` red X, `^A^` sword, `^D^` diamond, `^F^` flame, `^T^` star,
+    `^WP^` wolf, `^M^` moon, `^U^` lasso, `^N^` lute, `^H^` shield, `^$^` dollar, `^E^` euro
+  - Numbered badges `^1^` to `^12^` and a paw with a letter or digit on it (`^PK^`)
+  - Guild banners (`^F<code>^`, like `^FEUR^`) and icons (`^I<code>^`) for the guilds listed by `/tag guilds`
+  - Older clients show an unknown shape as the single letter's shape (`^PK^` is a plain paw)
+
+* Added `/tag guildmarks <off | tagged | auto>`. `auto` also draws a nearby player's own guild icon
+  above their nameplate (local only, not broadcast)
+
 
 ## [1.4.8] - 2026/10/01
 
