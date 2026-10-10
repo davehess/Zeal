@@ -740,7 +740,7 @@ Manual editing of the ini file is required to copy from old section to the new s
         shape instead of the moon
       - Numbered badges: `1` to `12` (e.g. `^7^`, `^12^`), readable from either side
       - Paw with a letter or digit on it: `P` then the character (e.g. `^PK^`), for a charmer's initial
-      - A guild's banner (a flag with its code) or icon: `B` or `I` then the guild's code (e.g. `^BEUR^`,
+      - A guild's banner (a flag carrying the guild's icon and name) or icon: `B` or `I` then the guild's code (e.g. `^BEUR^`,
         `^IMAY^`). `/tag guilds` lists the codes. An unknown code is read as the single letter (`^Blue^`
         is still a blue arrow)
       - A picture: `I` then the name of a `.png` or `.tga` file in `uifiles/zeal/tagicons` (e.g. `^IEUR^`

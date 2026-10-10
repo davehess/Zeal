@@ -17,7 +17,7 @@
 // This is plain math with no DirectX dependency so the meshes can be checked and previewed off-client.
 namespace TagShapes {
 
-// Guilds with a banner (^B<code>^: a swallowtail flag in the guild's color with its code on it) and an
+// Guilds with a banner (^B<code>^: a swallowtail flag in the guild's color carrying its logo, or its code when it has no drawing) and an
 // icon (^I<code>^: the guild's own symbol).
 struct Guild {
   const char *code;      // Two or three uppercase letters.
@@ -66,7 +66,9 @@ enum class Kind {
 
 // Which color a vertex takes: the tag color, a dark accent, a light accent, whichever of the two
 // accents contrasts with the tag color (the digits on a numbered badge), a fixed eye yellow, or a
-// shaded version of the tag color (the moon's craters).
+// shaded version of the tag color (the moon's craters). The Logo tones are for the logo on a guild banner: they
+// resolve as Base, Dark, Light and Shade do for the guild's own icon (BannerLogoRgb), so the logo looks like its
+// ^I<code>^ icon, and LogoText is the name's color (BannerTextRgb), which is also the logo's rim.
 enum class Tone : uint8_t {
   Base = 0,
   Dark,
@@ -74,6 +76,11 @@ enum class Tone : uint8_t {
   Contrast,
   Eye,
   Shade,
+  Logo,
+  LogoDark,
+  LogoLight,
+  LogoShade,
+  LogoText,  // The name on a banner: BannerTextRgb(guild).
 };
 
 struct Vertex {
@@ -92,6 +99,23 @@ struct Mesh {
 
 // Returns the mesh for a shape (empty for Kind::Count).
 Mesh Build(Kind kind);
+
+// WCAG relative luminance (0 black .. 1 white) of a 0xRRGGBB color, and the contrast ratio (1 .. 21) of two.
+float RelativeLuminance(uint32_t rgb);
+float ContrastRatio(uint32_t a, uint32_t b);
+
+// The color a mark written on a banner of banner_rgb should have: the given color when it contrasts with the
+// banner by at least 3:1, else a near-white or near-black tint of it, whichever contrasts more.
+uint32_t ContrastingLogoRgb(uint32_t banner_rgb, uint32_t logo_rgb);
+
+// The color of a guild's logo (an index into kGuilds): its icon color, or the color of the shape its icon reuses.
+uint32_t BannerLogoRgb(int guild);
+
+// The color of the name written on a guild's banner, and of the rim round its logo: ContrastingLogoRgb of the
+// banner and logo colors. BannerLogoIsOutlined says whether the logo's own color fails 3:1 against the flag, so
+// the banner draws that rim.
+uint32_t BannerTextRgb(int guild);
+bool BannerLogoIsOutlined(int guild);
 
 // Returns the paw glyph index (0 to 35) of '0'-'9' or 'A'-'Z' (either case), else -1.
 int GlyphIndex(char c);
