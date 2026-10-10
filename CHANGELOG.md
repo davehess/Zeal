@@ -14,7 +14,7 @@ Summarizes notable changes to Zeal
 
 * `/tag target ^KEY^` (and `/target ^KEY^`) matches a tag shape, which also finds players
 
-* Added a main assist tag shape `^MA^`: a target ring with four arrows pointing in at it. Only one
+* Added a main assist tag shape `^MA^`: two crossed swords with a target where they cross. Only one
   nameplate carries it at a time; tagging a new one removes it from the previous holder
 
 

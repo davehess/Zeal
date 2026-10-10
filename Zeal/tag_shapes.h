@@ -6,7 +6,7 @@
 
 // Geometry for the icon-style tag shapes (skull, cross, sword, diamond, flame, star, wolf, moon, lasso,
 // lute, shield, dollar, euro), the numbered badges 1 to 12, the letters and digits drawn on the pet paw,
-// a banner and an icon for each guild in kGuilds, and the main assist's crosshair.
+// a banner and an icon for each guild in kGuilds, and the main assist's crossed swords.
 //
 // Each shape is a set of flat parts extruded to a thickness. Most parts are convex (or at least
 // star-shaped around their center) so they triangulate as a simple fan; the wolf's traced parts carry
@@ -59,7 +59,7 @@ enum class Kind {
   BannerLast = Banner0 + kGuildCount - 1,
   GuildIcon0,  // Empty for a guild whose icon is an existing shape (icon_key).
   GuildIconLast = GuildIcon0 + kGuildCount - 1,
-  Crosshair,  // The main assist (^MA^): a target ring with four arrows pointing in at it.
+  CrossedSwordsTarget,  // The main assist (^MA^): two swords crossed in an X with a target where they cross.
   Count,      // Number of shapes (not a shape).
 };
 

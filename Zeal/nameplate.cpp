@@ -59,7 +59,7 @@ enum TagArrowColor : DWORD {
   Shield = D3DCOLOR_XRGB(0xa8, 0xb0, 0xbc),
   Dollar = D3DCOLOR_XRGB(0x3a, 0xb0, 0x5a),
   Euro = D3DCOLOR_XRGB(0xe8, 0xa0, 0x20),
-  MainAssist = D3DCOLOR_XRGB(0x18, 0xd8, 0xd0),  // Key MA (a target ring with four arrows): ensure unique.
+  MainAssist = D3DCOLOR_XRGB(0x18, 0xd8, 0xd0),  // Key MA (crossed swords with a target): ensure unique.
   Red = D3DCOLOR_XRGB(0xff, 0, 0),
   Orange = D3DCOLOR_XRGB(0xff, 0x80, 0),
   Yellow = D3DCOLOR_XRGB(0xff, 0xff, 0),
@@ -321,7 +321,7 @@ static TagArrows::Shape GetTagShape(DWORD tag_color) {
     case TagArrowColor::Euro:
       return TagArrows::Shape::Euro;
     case TagArrowColor::MainAssist:
-      return TagArrows::Shape::Crosshair;
+      return TagArrows::Shape::MainAssist;
     default:
       break;
   }
@@ -1749,7 +1749,8 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   Zeal::Game::print_chat("Usage: <message> prefixes: '+' to append, '^R^' or '*R:' for color arrow (R, O, Y, G, B, W)");
   Zeal::Game::print_chat(
       "Usage: shapes in place of the color: P paw, S stop, K skull, X x, A sword, D diamond, F flame, T star, "
-      "WP wolf, M moon, U lasso, N lute, H shield, $ dollar, E euro, MA main assist (target ring, one at a time)");
+      "WP wolf, M moon, U lasso, N lute, H shield, $ dollar, E euro, MA main assist (crossed swords with a "
+      "target, one at a time)");
   Zeal::Game::print_chat("Usage: numbered badges in place of the color: 1 to 12 (like '^7^' or '^12^')");
   Zeal::Game::print_chat("Usage: a paw with a letter or digit on it: P then the character (like '^PK^')");
   Zeal::Game::print_chat(
@@ -1772,7 +1773,7 @@ static int ReadGuildKey(const std::string &key, char kind) {
 
 // Returns the key of a "^key^" prefix (text starts with '^'): two digits for "^10^" to "^12^", 'P' plus
 // a letter or digit for a paw with that character ("^PK^"), "WP" for the wolf ("^WP^"), "MA" for the main
-// assist's target ring ("^MA^"), 'B' or 'I' plus a guild code for that guild's banner or icon ("^BEUR^",
+// assist's crossed swords ("^MA^"), 'B' or 'I' plus a guild code for that guild's banner or icon ("^BEUR^",
 // "^IEUR^"), 'I' plus the code of a picture in the tagicons folder, else the single character after the
 // '^'. Older clients read only the first character,
 // so "^PK^" shows them a plain paw, "^WP^" a white arrow, "^MA^" the moon and "^BEUR^" a blue one.

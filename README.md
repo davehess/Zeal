@@ -713,9 +713,9 @@ Manual editing of the ini file is required to copy from old section to the new s
       - Red stop sign (octagon): `S`
       - Icon shapes: `K` = skull, `X` = red X, `A` = gold sword, `D` = blue diamond, `F` = green flame,
         `T` = purple star, `WP` = wolf (`^WP^`), `M` = moon (mez), `U` = lasso (pull), `N` = lute (bard),
-        `H` = shield (tank), `$` = dollar, `E` = euro, `MA` = main assist (a target ring with four arrows
-        pointing in at it; only one at a time, a new `^MA^` takes it off whoever had it; clients before this
-        one show the moon)
+        `H` = shield (tank), `$` = dollar, `E` = euro, `MA` = main assist (two crossed swords with a
+        target where they cross; only one at a time, a new `^MA^` takes it off whoever had it; clients before
+        this one show the moon)
       - Numbered badges: `1` to `12` (e.g. `^7^`, `^12^`), readable from either side
       - Paw with a letter or digit on it: `P` then the character (e.g. `^PK^`), for a charmer's initial
       - A guild's banner (a flag with its code) or icon: `B` or `I` then the guild's code (e.g. `^BEUR^`,

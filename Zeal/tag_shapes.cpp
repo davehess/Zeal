@@ -151,11 +151,12 @@ std::vector<Part> CrossParts() {
   return {{Bar(center, 3.0f, 0.55f, kPi / 4), center}, {Bar(center, 3.0f, 0.55f, -kPi / 4), center}};
 }
 
-std::vector<Part> SwordParts() {
-  // Points down, like the arrow.
+std::vector<Part> SwordParts(float guard_width = 1.0f) {
+  // Points down, like the arrow. A narrower guard_width keeps the crossed swords' guards apart.
   const std::vector<Point> blade = {{0, 0}, {0.24f, 0.4f}, {0.24f, 1.72f}, {-0.24f, 1.72f}, {-0.24f, 0.4f}};
-  const std::vector<Point> guard = {{-0.9f, 1.84f}, {-0.78f, 1.72f}, {0.78f, 1.72f},
-                                    {0.9f, 1.84f},  {0.78f, 1.96f},  {-0.78f, 1.96f}};
+  const float g = guard_width;
+  const std::vector<Point> guard = {{-0.9f * g, 1.84f}, {-0.78f * g, 1.72f}, {0.78f * g, 1.72f},
+                                    {0.9f * g, 1.84f},  {0.78f * g, 1.96f},  {-0.78f * g, 1.96f}};
   std::vector<Part> parts;
   parts.push_back({blade, {0, 1.0f}, Tone::Light});
   parts.push_back(Detail(Rect(-0.05f, 0.45f, 0.05f, 1.6f), {0, 1.0f}, Tone::Dark));  // Fuller.
@@ -297,38 +298,53 @@ std::vector<Part> ShieldParts() {
   return parts;
 }
 
-std::vector<Part> CrosshairParts() {
-  // The main assist: a target ring with a dot and hairlines in it, and four arrows (up, down, left, right)
-  // that point in at the ring. Symmetric, so it reads the same from behind and at any bearing.
-  const Point center = {0, 1.6f};  // The outermost arrow ends reach z = 0 and z = 3.2.
-  constexpr float kRingRadius = 0.78f;
-  constexpr float kTipDistance = 0.98f;  // Where an arrow's point sits, a gap outside the ring's outer edge.
-  constexpr float kHeadLength = 0.5f;    // From the point to the base of the head.
-  constexpr float kHeadHalfWidth = 0.36f;
-  constexpr float kShaftLength = 0.3f;  // From the arrow's end in under the head, so the two read as one.
-  constexpr float kShaftWidth = 0.18f;
+// A part scaled and turned counter-clockwise by angle about from, then moved so that from lands on to. Turning
+// keeps a part's winding, so its fan or given triangles still face the right way. `lift` thickens it on both faces.
+Part Placed(Part part, Point from, float scale, float angle, Point to, float lift) {
+  const float c = cosf(angle), s = sinf(angle);
+  auto place = [&](Point point) {
+    const float dx = (point.x - from.x) * scale, dz = (point.z - from.z) * scale;
+    return Point{to.x + dx * c - dz * s, to.z + dx * s + dz * c};
+  };
+  for (auto &point : part.outline) point = place(point);
+  part.center = place(part.center);
+  part.y_front -= lift;
+  part.y_back += lift;
+  return part;
+}
+
+std::vector<Part> CrossedSwordsTargetParts() {
+  // The main assist: two swords crossed in an X, hilts down and blades up, with a target (a ring around a
+  // dot) where the blades cross. Each sword is SwordParts() scaled up, turned point-up and then 45 degrees
+  // either way about its blade, so both pass through the crossing. The second sword is a little thicker so
+  // the two faces do not z-fight where they overlap, and the target stands out of both. The shape is mirror
+  // symmetric, so it reads the same from either side.
+  constexpr float kCrossAt = 1.3f;  // How far up its blade (from the tip) each sword crosses.
+  constexpr float kScale = 1.4f;    // Bigger than the lone sword: crossed at 45 degrees it spans less height.
+  const Point from = {0, kCrossAt};
+  const Point cross = {0, 0};  // Placed here, then the whole shape is lowered so its lowest point is at z = 0.
   std::vector<Part> parts;
-  for (auto &part : Stroke(Ellipse(center, kRingRadius, kRingRadius, 40), 0.2f, Tone::Base, 0, true))
+  int sword = 0;
+  for (float angle : {kPi * 3 / 4, kPi * 5 / 4}) {  // Tip up and to the right, then up and to the left.
+    for (auto &part : SwordParts(0.6f))
+      parts.push_back(Placed(std::move(part), from, kScale, angle, cross, 0.045f * static_cast<float>(sword)));
+    ++sword;
+  }
+  // Level 3 and up stands out of the thicker sword's detail (which reaches level 2).
+  parts.push_back(Raised(Ellipse(cross, 0.46f, 0.46f, 20), cross, Tone::Dark, 3));  // A dark backing, so it reads.
+  for (auto &part : Stroke(Ellipse(cross, 0.32f, 0.32f, 16), 0.1f, Tone::Light, 4, true))
     parts.push_back(std::move(part));
-  parts.push_back(Raised(Ellipse(center, 0.15f, 0.15f, 16), center, Tone::Light, 1));                      // Bullseye.
-  parts.push_back(Raised(Rect(-0.04f, center.z - 0.6f, 0.04f, center.z + 0.6f), center, Tone::Light, 1));  // Hairlines.
-  parts.push_back(Raised(Rect(-0.6f, center.z - 0.04f, 0.6f, center.z + 0.04f), center, Tone::Light, 1));
-  for (int i = 0; i < 4; ++i) {
-    const float angle = kPi / 2 * static_cast<float>(i);
-    const float dx = cosf(angle), dz = sinf(angle);  // Outward from the center; the arrow points back along it.
-    const float px = -dz, pz = dx;                   // A quarter turn counter-clockwise from that.
-    auto at = [&](float distance, float side) {
-      return Point{center.x + dx * distance + px * side, center.z + dz * distance + pz * side};
-    };
-    const float base = kTipDistance + kHeadLength;
-    const std::vector<Point> head = {at(kTipDistance, 0), at(base, -kHeadHalfWidth), at(base, kHeadHalfWidth)};
-    parts.push_back({head, at(kTipDistance + kHeadLength / 3, 0)});  // Counter-clockwise, centered for the fan.
-    const Point shaft = at(center.z - kShaftLength / 2, 0);  // The arrow ends center.z out, at z = 0 for the lowest.
-    parts.push_back({Bar(shaft, kShaftLength, kShaftWidth, angle), shaft});
+  parts.push_back(Raised(Ellipse(cross, 0.12f, 0.12f, 12), cross, Tone::Light, 5));  // The dot.
+
+  float lowest = 0;
+  for (const auto &part : parts)
+    for (const auto &point : part.outline) lowest = (point.z < lowest) ? point.z : lowest;
+  for (auto &part : parts) {
+    for (auto &point : part.outline) point.z -= lowest;
+    part.center.z -= lowest;
   }
   return parts;
 }
-
 std::vector<Part> LuteParts() {
   // A lute, built upright (neck up) and then tilted like the bard's instrument in hand.
   std::vector<Part> parts;
@@ -1123,8 +1139,8 @@ Mesh Build(Kind kind) {
     case Kind::Euro:
       parts = EuroParts();
       break;
-    case Kind::Crosshair:
-      parts = CrosshairParts();
+    case Kind::CrossedSwordsTarget:
+      parts = CrossedSwordsTargetParts();
       break;
     default:
       if (kind >= Kind::Number1 && kind <= Kind::Number12)
