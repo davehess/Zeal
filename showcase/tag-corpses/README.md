@@ -24,5 +24,9 @@ A target whose model is not drawn (too far away, not loaded) still cannot be tag
 
 **Try it:** the fork's test-all build, https://github.com/davehess/Zeal/releases/tag/test-all-build, then the "Corpses" section of [`TRY-IN-GAME.md`](../tag-shapes/TRY-IN-GAME.md) (in the `tag-shapes` folder).
 
+**Pull request:** _link added when it is filed._
+
+**Testing evidence:** _added after the in-game test run._
+
 ---
 [Test cases](TEST-CASES.md) · [Poster](../posters/tag-corpses.png) · [All changes](../README.md)

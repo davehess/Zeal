@@ -22,5 +22,9 @@ All multi-letter keys (`WP`, `MA`, `MEZ`, `SLOW`) now live in one table read by 
 
 **Try it:** in the fork's test-all build (https://github.com/davehess/Zeal/releases/tag/test-all-build), `3c4766c` or later.
 
+**Pull request:** the same branch as *Main assist marker and %tid*; link added when it is filed.
+
+**Testing evidence:** _added after the in-game test run._
+
 ---
 [Test cases](TEST-CASES.md) · [Poster](../posters/mez-slow-keys.png) · [All changes](../README.md)

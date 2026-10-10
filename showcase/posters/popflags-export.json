@@ -1,0 +1,15 @@
+{
+  "order": 12,
+  "title": "PoP flags saved on /camp",
+  "pitch": "Camp out and your #popflags progress lands in a file a guild can collect.",
+  "image": "popflags-export/diagram-mini.png",
+  "bullets": [
+    "Rides the existing \"Export data on /camp\" option",
+    "Saves <name>-PoPFlags.txt beside the other exports",
+    "/outputfile popflags does it on demand"
+  ],
+  "try": "test-all build at github.com/davehess/Zeal/releases/tag/test-all-build",
+  "status": "draft",
+  "pr_url": "",
+  "branch": "popflags-export"
+}

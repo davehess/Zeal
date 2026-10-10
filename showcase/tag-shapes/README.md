@@ -23,5 +23,9 @@ Type the key after the caret, for example `/tag local ^K^Kill`, `^7^`, `^PK^`, `
 
 **Try it:** install the fork's test-all build, https://github.com/davehess/Zeal/releases/tag/test-all-build, then paste the lines from [`TRY-IN-GAME.md`](TRY-IN-GAME.md).
 
+**Pull request:** _link added when it is filed._
+
+**Testing evidence:** _added after the in-game test run._
+
 ---
 [Test cases](TEST-CASES.md) · [Poster](../posters/tag-shapes.png) · [All changes](../README.md)

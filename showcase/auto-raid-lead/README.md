@@ -22,5 +22,9 @@ Both passwords live in `zeal.ini` under `AutoRaidInvite` and `AutoRaidLead`. A t
 
 **Try it:** in the fork's test-all build (https://github.com/davehess/Zeal/releases/tag/test-all-build), `3c4766c` or later.
 
+**Pull request:** _link added when it is filed._
+
+**Testing evidence:** _added after the in-game test run._
+
 ---
 [Test cases](TEST-CASES.md) · [Poster](../posters/auto-raid-lead.png) · [All changes](../README.md)

@@ -22,5 +22,9 @@ A camera-facing textured square is drawn where a shape would be, using the same 
 
 **Try it:** the fork's test-all build, https://github.com/davehess/Zeal/releases/tag/test-all-build, then [`TEST-CASES.md`](TEST-CASES.md).
 
+**Pull request:** _link added when it is filed._
+
+**Testing evidence:** _added after the in-game test run._
+
 ---
 [Test cases](TEST-CASES.md) · [Poster](../posters/tag-icon-files.png) · [All changes](../README.md)

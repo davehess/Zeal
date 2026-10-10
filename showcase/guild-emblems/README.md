@@ -22,5 +22,9 @@ A table of guilds (code and colour) drives both keys, and `/tag guilds` lists th
 
 **Try it:** the fork's test-all build, https://github.com/davehess/Zeal/releases/tag/test-all-build, then `/tag guildmarks auto` near other guilds.
 
+**Pull request:** the same branch as *Tag icons, numbered badges, lettered paws*; link added when it is filed.
+
+**Testing evidence:** _added after the in-game test run._
+
 ---
 [Test cases](TEST-CASES.md) · [Poster](../posters/guild-emblems.png) · [All changes](../README.md)

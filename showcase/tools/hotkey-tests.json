@@ -1,0 +1,555 @@
+{
+ "build": "test-all ab95a91",
+ "channel": "wpzt:zt10",
+ "changes": {
+  "TS": [
+   "zeal-tag-shapes",
+   "Tag icons, numbered badges, lettered paws"
+  ],
+  "GE": [
+   "zeal-guild-emblems",
+   "Guild banners, icons, automatic guild marks"
+  ],
+  "F": [
+   "zeal-guild-icon-refresh",
+   "Guild icons and banners, round two"
+  ],
+  "TI": [
+   "zeal-tag-icon-files",
+   "Tag pictures from a folder"
+  ],
+  "TC": [
+   "zeal-tag-corpses",
+   "Tag corpses"
+  ],
+  "TP": [
+   "zeal-tag-persistence",
+   "Tag persistence"
+  ],
+  "UC": [
+   "zeal-hide-ui-cursor",
+   "Cursor while the UI is hidden"
+  ],
+  "M": [
+   "zeal-mez-slow-keys",
+   "Mez and slow keys"
+  ],
+  "MA": [
+   "zeal-main-assist",
+   "Main assist marker, %tid, /target by tag"
+  ],
+  "R": [
+   "zeal-auto-raid-lead",
+   "Auto raid lead, persisted /ari"
+  ],
+  "PF": [
+   "zeal-popflags-export",
+   "PoP flags export on camp"
+  ]
+ },
+ "tests": [
+  [
+   "TS1",
+   "TS1 red",
+   "red arrow (stock shape unchanged)",
+   [
+    "/tag local ^R^TS1"
+   ]
+  ],
+  [
+   "TS2",
+   "TS2 skull",
+   "bone-white skull",
+   [
+    "/tag local ^K^TS2"
+   ]
+  ],
+  [
+   "TS3",
+   "TS3 wolf",
+   "wolf head with yellow eyes",
+   [
+    "/tag local ^WP^TS3"
+   ]
+  ],
+  [
+   "TS4",
+   "TS4 #12",
+   "white badge reading 12",
+   [
+    "/tag local ^12^TS4"
+   ]
+  ],
+  [
+   "TS5",
+   "TS5 pawK",
+   "green paw with a K on the pad",
+   [
+    "/tag local ^PK^TS5"
+   ]
+  ],
+  [
+   "TS6",
+   "TS6 ^-^",
+   "shape removed, text TS6 stays",
+   [
+    "/tag local ^-^TS6"
+   ]
+  ],
+  [
+   "TS7",
+   "TS7 help",
+   "/tag help lists icons, badges, paws, flags",
+   [
+    "/tag"
+   ]
+  ],
+  [
+   "TS8",
+   "TS8 cap",
+   "long label cut at 32 chars, shape still draws",
+   [
+    "/tag local ^FHBM^Here There Be Monsters TS8"
+   ]
+  ],
+  [
+   "GE1",
+   "GE1 list",
+   "chat lists all 30 guild codes",
+   [
+    "/tag guilds"
+   ]
+  ],
+  [
+   "GE2",
+   "GE2 IWP",
+   "Wolf Pack icon: the wolf",
+   [
+    "/tag local ^IWP^GE2"
+   ]
+  ],
+  [
+   "GE3",
+   "GE3 imay",
+   "Mayhem icon, lower-case key works",
+   [
+    "/tag local ^imay^GE3"
+   ]
+  ],
+  [
+   "GE4",
+   "GE4 fmay",
+   "Mayhem FLAG, lower-case key works",
+   [
+    "/tag local ^fmay^GE4"
+   ]
+  ],
+  [
+   "GE5",
+   "GE5 marks",
+   "prints guild mark mode (tagged)",
+   [
+    "/tag guildmarks"
+   ]
+  ],
+  [
+   "F1",
+   "F1 WP",
+   "white wolf, dark rim, gold flag, WOLF/PACK",
+   [
+    "/tag local ^FWP^F1"
+   ]
+  ],
+  [
+   "F2",
+   "F2 FRE",
+   "blue bird on green flag, FREEDOM",
+   [
+    "/tag local ^FFRE^F2"
+   ]
+  ],
+  [
+   "F3",
+   "F3 FG",
+   "gold crown on blue flag, FORMER/GLORY",
+   [
+    "/tag local ^FFG^F3"
+   ]
+  ],
+  [
+   "F4",
+   "F4 TRQ",
+   "layered pink lotus on pink flag, TRANQ",
+   [
+    "/tag local ^FTRQ^F4"
+   ]
+  ],
+  [
+   "F5",
+   "F5 NOC",
+   "silver moon on green flag, NOCTURNAL",
+   [
+    "/tag local ^FNOC^F5"
+   ]
+  ],
+  [
+   "F6",
+   "F6 MGE",
+   "MASS / gold mirror / GROUP EGO",
+   [
+    "/tag local ^FMGE^F6"
+   ]
+  ],
+  [
+   "F7",
+   "F7 CMP",
+   "green tent with flag, CAMPED",
+   [
+    "/tag local ^FCMP^F7"
+   ]
+  ],
+  [
+   "F8",
+   "F8 HBM",
+   "HERE THERE / serpent / BE MONSTERS",
+   [
+    "/tag local ^FHBM^F8"
+   ]
+  ],
+  [
+   "F9",
+   "F9 INT",
+   "gold ankh, INTER- / VENTION",
+   [
+    "/tag local ^FINT^F9"
+   ]
+  ],
+  [
+   "F10",
+   "F10 SOW",
+   "acorn, SQUIRRELS / OF WAR readable",
+   [
+    "/tag local ^FSOW^F10"
+   ]
+  ],
+  [
+   "F11",
+   "F11 BRN",
+   "lit rolled cigarette icon, not a match",
+   [
+    "/tag local ^IBRN^F11"
+   ]
+  ],
+  [
+   "F12",
+   "F12 ^F^",
+   "plain FLAME, not a guild flag",
+   [
+    "/tag local ^F^F12"
+   ]
+  ],
+  [
+   "F13",
+   "F13 Fire",
+   "FLAME (Fire is not a guild)",
+   [
+    "/tag local ^Fire^F13"
+   ]
+  ],
+  [
+   "F14",
+   "F14 ^B",
+   "plain BLUE ARROW, not a flag",
+   [
+    "/tag local ^BWP^F14"
+   ]
+  ],
+  [
+   "F15",
+   "F15 FXYZ",
+   "FLAME (no guild called XYZ)",
+   [
+    "/tag local ^FXYZ^F15"
+   ]
+  ],
+  [
+   "TI1",
+   "TI1 list",
+   "chat lists pictures found + folder path",
+   [
+    "/tag icons"
+   ]
+  ],
+  [
+   "TI2",
+   "TI2 EUR",
+   "Europa shield picture, no black box",
+   [
+    "/tag local ^IEUR^TI2"
+   ]
+  ],
+  [
+   "TI3",
+   "TI3 UP",
+   "UP card if listed: arrow up, red left",
+   [
+    "/tag local ^IUP^TI3"
+   ]
+  ],
+  [
+   "TC1",
+   "TC1 corpse",
+   "TARGET A CORPSE: paw L + Loot on it",
+   [
+    "/tag local ^PL^Loot"
+   ]
+  ],
+  [
+   "TC2",
+   "TC2 find",
+   "ESC first: re-targets the corpse tagged Loot",
+   [
+    "/tag target Loot"
+   ]
+  ],
+  [
+   "TC3",
+   "TC3 kill",
+   "LIVE mob: skull now, NONE on its corpse",
+   [
+    "/tag local ^K^TC3"
+   ]
+  ],
+  [
+   "TP1",
+   "TP1 save",
+   "tag 1 shown. Now camp + log back in",
+   [
+    "/tag local ^1^TP1"
+   ]
+  ],
+  [
+   "TP2",
+   "TP2 back",
+   "after relog: badge 1 is back on that mob",
+   []
+  ],
+  [
+   "UC1",
+   "UC1 state",
+   "prints the UI-hidden cursor setting",
+   [
+    "/uicursor"
+   ]
+  ],
+  [
+   "UC2",
+   "UC2 F10",
+   "press F10: white arrow follows mouse; click a mob",
+   []
+  ],
+  [
+   "UC3",
+   "UC3 off",
+   "cursor off: F10 shows no arrow",
+   [
+    "/uicursor off"
+   ]
+  ],
+  [
+   "UC4",
+   "UC4 on",
+   "cursor back on; press F10 to leave",
+   [
+    "/uicursor on"
+   ]
+  ],
+  [
+   "M1",
+   "M1 MEZ",
+   "moon with label M1",
+   [
+    "/tag local ^MEZ^M1"
+   ]
+  ],
+  [
+   "M2",
+   "M2 SLOW",
+   "magenta hourglass",
+   [
+    "/tag local ^SLOW^M2"
+   ]
+  ],
+  [
+   "M3",
+   "M3 ^M^",
+   "label M3 only, NO moon",
+   [
+    "/tag local ^M^M3"
+   ]
+  ],
+  [
+   "M4",
+   "M4 mez",
+   "moon again (lower-case key)",
+   [
+    "/tag local ^mez^M4"
+   ]
+  ],
+  [
+   "M5",
+   "M5 MEZZ",
+   "label M5 only, no shape",
+   [
+    "/tag local ^MEZZ^M5"
+   ]
+  ],
+  [
+   "MA1",
+   "MA1 tid",
+   "next line shows the target spawn id",
+   [
+    "/1 MA1 %t id=%tid"
+   ]
+  ],
+  [
+   "MA2",
+   "MA2 tid",
+   "3 same-name mobs: same name, ids differ",
+   [
+    "/1 MA2 %t id=%tid"
+   ]
+  ],
+  [
+   "MA3",
+   "MA3 MA",
+   "crossed swords, target on the crossing",
+   [
+    "/tag local ^MA^MA3"
+   ]
+  ],
+  [
+   "MA4",
+   "MA4 Foo",
+   "mob tagged Foo. Then press Esc",
+   [
+    "/tag local Foo"
+   ]
+  ],
+  [
+   "MA5",
+   "MA5 tgt",
+   "targets the mob tagged Foo",
+   [
+    "/target Foo"
+   ]
+  ],
+  [
+   "MA6",
+   "MA6 Ma",
+   "normal target-by-name, no tag used",
+   [
+    "/target Ma"
+   ]
+  ],
+  [
+   "MA7",
+   "MA7 me",
+   "crossed swords over YOU",
+   [
+    "/target {me}",
+    "/tag local ^MA^"
+   ]
+  ],
+  [
+   "R1",
+   "R1 ari",
+   "status: enabled, password o***",
+   [
+    "/ari owl7",
+    "/ari"
+   ]
+  ],
+  [
+   "R2",
+   "R2 ari?",
+   "AFTER camp+relog: still enabled o***",
+   [
+    "/ari"
+   ]
+  ],
+  [
+   "R3",
+   "R3 ariX",
+   "status: disabled",
+   [
+    "/ari clear",
+    "/ari"
+   ]
+  ],
+  [
+   "R4",
+   "R4 arl",
+   "enabled o***, says if you lead a raid",
+   [
+    "/arl owl7",
+    "/arl"
+   ]
+  ],
+  [
+   "R5",
+   "R5 arl?",
+   "status line for /arl",
+   [
+    "/arl"
+   ]
+  ],
+  [
+   "R6",
+   "R6 arlX",
+   "status: disabled",
+   [
+    "/arl clear",
+    "/arl"
+   ]
+  ],
+  [
+   "PF1",
+   "PF1 flags",
+   "#popflags reply, then saved to <you>-PoPFlags",
+   [
+    "/outputfile popflags"
+   ]
+  ],
+  [
+   "PF2",
+   "PF2 again",
+   "press within 10s: 'was just sent', no new file",
+   [
+    "/outputfile popflags"
+   ]
+  ],
+  [
+   "PF3",
+   "PF3 name",
+   "wait 10s first: saved to pftest.txt",
+   [
+    "/outputfile popflags pftest"
+   ]
+  ],
+  [
+   "PF4",
+   "PF4 camp",
+   "Export on /camp ON; at next camp PoPFlags updates",
+   []
+  ],
+  [
+   "T9",
+   "T9 END",
+   "all your local tags gone. END",
+   [
+    "/tag clear"
+   ]
+  ]
+ ]
+}
