@@ -2,6 +2,7 @@
 
 #include <fstream>
 
+#include "callbacks.h"
 #include "commands.h"
 #include "game_functions.h"
 #include "miniz.h"
