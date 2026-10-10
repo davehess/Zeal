@@ -266,6 +266,7 @@ void TagArrows::RenderQueue() {
   D3DXMATRIX originalWorldMatrix;
   device.GetTransform(D3DTS_WORLD, &originalWorldMatrix);  // Stashing this for restoration.
 
+  bool failed = false;
   D3DXMATRIX translationMatrix;
   for (const auto &entry : arrow_queue) {
     // Retrieve the color dependent set of arrow model vertices.
@@ -283,8 +284,8 @@ void TagArrows::RenderQueue() {
     device.SetTransform(D3DTS_WORLD, &translationMatrix);
 
     if (render_info.start_vertex_index < 0) {
-      Release();
-      return;
+      failed = true;  // Fall through to the state restoration below before releasing.
+      break;
     }
 
     device.SetIndices(index_buffer, render_info.start_vertex_index);
@@ -297,6 +298,7 @@ void TagArrows::RenderQueue() {
   device.SetIndices(NULL, 0);          // Ensure index_buffer is no longer bound.
   device.SetTransform(D3DTS_WORLD, &originalWorldMatrix);
   render_state.restore_state();
+  if (failed) Release();
 }
 
 // Draws each queued picture as a quad that faces the camera, the same way the nameplate text does.

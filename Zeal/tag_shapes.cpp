@@ -1027,6 +1027,21 @@ int GuildIndex(const std::string &code) {
   return -1;
 }
 
+static std::string AlnumLower(const std::string &text) {
+  std::string out;
+  for (unsigned char c : text)
+    if (std::isalnum(c)) out += static_cast<char>(std::tolower(c));
+  return out;
+}
+
+int GuildIndexByName(const std::string &name) {
+  const std::string wanted = AlnumLower(name);
+  if (wanted.empty()) return -1;
+  for (int i = 0; i < kGuildCount; ++i)
+    if (AlnumLower(kGuilds[i].name) == wanted) return i;
+  return -1;
+}
+
 int GlyphIndex(char c) {
   if (c >= '0' && c <= '9') return c - '0';
   if (c >= 'A' && c <= 'Z') return 10 + (c - 'A');
