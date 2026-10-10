@@ -2,8 +2,8 @@
   "caption": "Your PoP flags saved to a file when you camp",
   "steps": [
     { "label": "/camp", "sub": "with \"Export data on /camp\" on" },
-    { "label": "Zeal sends #popflags, then 1 to 5", "sub": "one a second (\"all\" is staff-only)" },
-    { "label": "Keeps the server's replies", "sub": "server lines only; chat and combat skipped", "hot": true },
+    { "label": "Zeal sends #popflags, then 1 to 5", "sub": "each once, ¼ s apart (\"all\" is staff-only)" },
+    { "label": "Keeps the server's replies", "sub": "into the file, out of your chat window", "hot": true },
     { "label": "<name>-PoPFlags.txt", "sub": "beside the inventory and Quarmy files" },
     { "label": "Guilds collate the files", "sub": "or /outputfile popflags any time" }
   ]
