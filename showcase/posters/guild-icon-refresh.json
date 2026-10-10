@@ -9,8 +9,8 @@
     "Full guild names, above and below the icon when they are long",
     "Burnouts: a lit rolled cigarette replaces the match"
   ],
-  "try": "not in the test-all build yet (local draft branch, needs a build)",
+  "try": "the fork's test-all build (3c4766c)",
   "status": "draft",
   "pr_url": "",
-  "branch": "guildicon-draft (local)"
+  "branch": "guildicon-draft"
 }

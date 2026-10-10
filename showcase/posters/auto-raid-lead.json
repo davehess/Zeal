@@ -8,8 +8,8 @@
     "Handoff only if you lead, the sender is in your raid, once per 10 s",
     "Draft: not compiled, needs a two-person raid test"
   ],
-  "try": "not in the test-all build yet (local draft branch, needs a build)",
+  "try": "the fork's test-all build (3c4766c)",
   "status": "draft",
   "pr_url": "",
-  "branch": "raidlead-draft (local)"
+  "branch": "raidlead-draft"
 }
