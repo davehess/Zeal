@@ -4,7 +4,7 @@
   "pitch": "Every guild gets a flag and an icon, and players can show their guild automatically.",
   "image": "guild-emblems/guilds.png",
   "bullets": [
-    "30 guilds, each with ^B<code>^ banner and ^I<code>^ icon",
+    "30 guilds, each with ^F<code>^ banner and ^I<code>^ icon",
     "/tag guildmarks off, tagged or auto (default: tagged)",
     "Auto marks: players only, never /anon or /roleplay, within 150 units"
   ],

@@ -6,7 +6,7 @@
   "bullets": [
     "Twelve new symbols plus the wolf, from ^K^ skull to ^E^ euro",
     "Badges ^1^ to ^12^ for kill and crowd-control order; ^PK^ paw with a K",
-    "^B<code>^ banner and ^I<code>^ icon for each guild; /tag guilds lists them"
+    "^F<code>^ banner and ^I<code>^ icon for each guild; /tag guilds lists them"
   ],
   "try": "test-all build at github.com/davehess/Zeal/releases/tag/test-all-build",
   "status": "draft",
