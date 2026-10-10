@@ -1912,11 +1912,12 @@ static void RemoveTagTextField(const std::string &field_text, std::string &tag_t
 }
 
 // Returns the icon (and picture file, if the guild has one) of a player's own guild for auto mode, else nullptr.
-// Players that are anonymous or roleplaying, far away, or in a guild that is not in kGuilds get nothing.
+// Players that are anonymous, far away, or in a guild that is not in kGuilds get nothing. Roleplaying players
+// still show their guild on the nameplate (only anonymous hides it), so they get a mark too.
 const NamePlate::GuildMark *NamePlate::get_auto_guild_mark(const Zeal::GameStructures::Entity &entity,
                                                            const Zeal::GameStructures::Entity *self) {
   static constexpr float kMaxGuildMarkDist = 150.f;
-  if (!self || entity.Type != Zeal::GameEnums::Player || entity.GuildId == -1 || entity.AnonymousState != 0)
+  if (!self || entity.Type != Zeal::GameEnums::Player || entity.GuildId == -1 || entity.AnonymousState == 1)
     return nullptr;
   const float dx = entity.Position.x - self->Position.x;
   const float dy = entity.Position.y - self->Position.y;
