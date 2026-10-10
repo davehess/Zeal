@@ -32,6 +32,8 @@ class NamePlate {
     long long last_seen = 0;  // time() the tag was last set or seen live, for expiry.
     bool live_seen = false;   // Matched to a live entity since the last clean_ui() (or, for a player, since
                               // they last left).
+    bool guild_mark = false;  // NamePlateInfo::guild_mark, so a restored guild mark still obeys /tag guildmarks.
+    std::string tag_image;    // NamePlateInfo::tag_image; the picture file is resolved again on restore.
   };
 
   std::map<std::pair<int, int>, SavedTag> saved_tags;  // Keyed by {zone id, spawn id}.
@@ -161,7 +163,7 @@ class NamePlate {
     std::string tag_text;
     DWORD color;
     DWORD tag_color;
-    bool corpse_tag = false;  // The tag was set on the corpse (tags from before the death stay hidden).
+    bool corpse_tag = false;     // The tag was set on the corpse (tags from before the death stay hidden).
     std::string tag_image;       // Lower-case key of the tag's picture ("ieur" for EUR.png, "beur" for BEUR.png).
     std::string tag_image_file;  // That picture's file, resolved when the tag is applied ("" if none).
     bool guild_mark = false;     // The tag_color came from a guild banner or icon key (^B..^, ^I..^).

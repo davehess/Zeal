@@ -1217,9 +1217,15 @@ void NamePlate::sync_saved_tags() {
     if (!text.empty() && text.back() == '\n') text.pop_back();
     if (!text.empty() || info.tag_color != TagArrowColor::Off) {  // Tagged: save it (or note it is still live).
       if (saved == saved_map.end() || saved->second.name != name || saved->second.tag_text != text ||
-          saved->second.tag_color != info.tag_color) {
-        saved_map[key] = {
-            .name = name, .tag_text = text, .tag_color = info.tag_color, .last_seen = now, .live_seen = true};
+          saved->second.tag_color != info.tag_color || saved->second.guild_mark != info.guild_mark ||
+          saved->second.tag_image != info.tag_image) {
+        saved_map[key] = {.name = name,
+                          .tag_text = text,
+                          .tag_color = info.tag_color,
+                          .last_seen = now,
+                          .live_seen = true,
+                          .guild_mark = info.guild_mark,
+                          .tag_image = info.tag_image};
         saved_tags_dirty = true;
       } else {
         saved->second.live_seen = true;
@@ -1235,6 +1241,9 @@ void NamePlate::sync_saved_tags() {
       } else {  // Back after zoning, a character switch or a crash: restore it.
         info.tag_text = saved->second.tag_text.empty() ? "" : saved->second.tag_text + "\n";
         info.tag_color = saved->second.tag_color;
+        info.guild_mark = saved->second.guild_mark;  // Same fields handle_tag_message sets from the tag's key.
+        info.tag_image = saved->second.tag_image;
+        info.tag_image_file = ResolveTagImageFile(info.tag_image);
         saved->second.live_seen = true;
         if (!info.tag_text.empty() && entity != Zeal::Game::get_target() && !setting_tag_disable_tagged_color.get() &&
             ZealService::get_instance()->ui && get_color_callback)
@@ -1274,7 +1283,8 @@ void NamePlate::clear_saved_tags_in_zone() {
 
 static constexpr int kSavedPlayerZone = -1;  // The file's zone field for a player tag, matched by name alone.
 
-// File format, one tag per line: zone_id, spawn_id, last_seen (unix time), color (hex), name, text, tab separated.
+// File format, one tag per line: zone_id, spawn_id, last_seen (unix time), color (hex, optionally followed by
+// ":1" or ":0" for a guild mark and ":" plus the tag picture key), name, text, tab separated.
 // A player's line has zone kSavedPlayerZone and spawn id 0. Merged into saved_tags and saved_player_tags,
 // keeping the newer of any duplicate.
 void NamePlate::load_saved_tags(const std::string &filename) {
@@ -1299,138 +1309,25 @@ void NamePlate::load_saved_tags(const std::string &filename) {
     const long long last_seen = strtoll(fields[2].c_str(), &end, 10);
     if (*end || now - last_seen > kSavedTagMaxAgeSeconds) continue;
     const DWORD color = strtoul(fields[3].c_str(), &end, 16);
-    if (*end) continue;
+    bool guild_mark = false;
+    std::string tag_image;  // Older files end the color here and have neither.
+    if (*end == ':') {
+      guild_mark = end[1] == '1';
+      const char *image = (end[1] && end[2] == ':') ? end + 3 : "";
+      tag_image = image;
+    } else if (*end) {
+      continue;
+    }
 
     auto &saved = (zone_id == kSavedPlayerZone) ? saved_player_tags[fields[4]] : saved_tags[{zone_id, spawn_id}];
     if (saved.last_seen >= last_seen) continue;  // This session already has a newer copy.
-    saved = {.name = fields[4], .tag_text = fields[5], .tag_color = color, .last_seen = last_seen, .live_seen = false};
-  }
-  clear_saved_tags_in_zone();  // Includes mobs out of view, so a clear is not undone by a later restore.
-}
-
-static constexpr long long kSavedTagMaxAgeSeconds = 3 * 60 * 60;  // Long enough for a raid, short of a repop.
-static constexpr long long kSavedTagRefreshSeconds = 10 * 60;     // How often a live tag's last_seen is rewritten.
-static constexpr ULONGLONG kSavedTagSyncIntervalMs = 1000;
-
-// Runs about once a second: mirrors live tags into saved_tags, restores saved tags onto entities that
-// have reappeared (after zoning, a character switch, a device reset or a crash), and writes the
-// character's tag file when anything changed.
-void NamePlate::sync_saved_tags() {
-  if (!setting_tag_enable.get() || !setting_tag_persist.get() || !Zeal::Game::is_in_game()) return;
-  const ULONGLONG now_ms = GetTickCount64();
-  if (now_ms < saved_tags_next_sync) return;
-  saved_tags_next_sync = now_ms + kSavedTagSyncIntervalMs;
-
-  const auto *self = Zeal::Game::get_self();
-  const auto *char_info = Zeal::Game::get_char_info();
-  if (!self || !char_info) return;
-
-  // Load the character's file at login or a character switch, merged with what this session already holds.
-  std::string filename = (Zeal::Game::get_game_path() / (std::string(char_info->Name) + "_tags.txt")).string();
-  if (filename != saved_tags_filename) {
-    load_saved_tags(filename);
-    saved_tags_filename = filename;
-  }
-
-  const long long now = time(nullptr);
-  const int zone_id = self->ZoneId;
-
-  // One live entity against its saved copy: save a new or changed tag (or note it is still live), restore
-  // the tag onto an entity that is back untagged, and drop a saved tag that was cleared while in view.
-  auto sync_one = [&](auto &saved_map, const auto &key, const std::string &name, Zeal::GameStructures::Entity *entity,
-                      NamePlateInfo &info) {
-    auto saved = saved_map.find(key);
-    std::string text = info.tag_text;
-    if (!text.empty() && text.back() == '\n') text.pop_back();
-    if (!text.empty() || info.tag_color != TagArrowColor::Off) {  // Tagged: save it (or note it is still live).
-      if (saved == saved_map.end() || saved->second.name != name || saved->second.tag_text != text ||
-          saved->second.tag_color != info.tag_color) {
-        saved_map[key] = {
-            .name = name, .tag_text = text, .tag_color = info.tag_color, .last_seen = now, .live_seen = true};
-        saved_tags_dirty = true;
-      } else {
-        saved->second.live_seen = true;
-        if (now - saved->second.last_seen > kSavedTagRefreshSeconds) {
-          saved->second.last_seen = now;
-          saved_tags_dirty = true;
-        }
-      }
-    } else if (saved != saved_map.end()) {
-      if (saved->second.name != name || saved->second.live_seen) {
-        saved_map.erase(saved);  // Another mob now has the spawn id, or the tag was cleared.
-        saved_tags_dirty = true;
-      } else {  // Back after zoning, a character switch or a crash: restore it.
-        info.tag_text = saved->second.tag_text.empty() ? "" : saved->second.tag_text + "\n";
-        info.tag_color = saved->second.tag_color;
-        saved->second.live_seen = true;
-        if (!info.tag_text.empty() && entity != Zeal::Game::get_target() && !setting_tag_disable_tagged_color.get() &&
-            ZealService::get_instance()->ui && get_color_callback)
-          info.color = get_color_callback(static_cast<int>(ColorIndex::Tagged));
-      }
-    }
-  };
-
-  for (auto &[entity, info] : nameplate_info_map) {
-    if (!entity || !entity->SpawnId) continue;
-    const std::string name = Zeal::Game::strip_name(entity->Name);
-    if (entity->Type == Zeal::GameEnums::Player) {  // By name, in any zone: the spawn id changes on each zone-in.
-      sync_one(saved_player_tags, name, name, entity, info);
-      continue;
-    }
-    const auto key = std::make_pair(zone_id, static_cast<int>(entity->SpawnId));
-    if (entity->Type >= Zeal::GameEnums::NPCCorpse) {  // A kill ends the tag.
-      if (saved_tags.erase(key)) saved_tags_dirty = true;
-      continue;
-    }
-    sync_one(saved_tags, key, name, entity, info);
-  }
-
-  auto too_old = [now](const auto &entry) { return now - entry.second.last_seen > kSavedTagMaxAgeSeconds; };
-  if (std::erase_if(saved_tags, too_old) + std::erase_if(saved_player_tags, too_old)) saved_tags_dirty = true;
-  if (saved_tags_dirty) write_saved_tags();
-}
-
-void NamePlate::clear_saved_tags_in_zone() {
-  const auto *self = Zeal::Game::get_self();
-  if (!self || (saved_tags.empty() && saved_player_tags.empty())) return;
-  const int zone_id = self->ZoneId;
-  std::erase_if(saved_tags, [zone_id](const auto &entry) { return entry.first.first == zone_id; });
-  saved_player_tags.clear();  // Player tags belong to no zone, so a clear takes all of them.
-  write_saved_tags();
-}
-
-static constexpr int kSavedPlayerZone = -1;  // The file's zone field for a player tag, matched by name alone.
-
-// File format, one tag per line: zone_id, spawn_id, last_seen (unix time), color (hex), name, text, tab separated.
-// A player's line has zone kSavedPlayerZone and spawn id 0. Merged into saved_tags and saved_player_tags,
-// keeping the newer of any duplicate.
-void NamePlate::load_saved_tags(const std::string &filename) {
-  std::ifstream file(filename);
-  if (!file) return;
-  const long long now = time(nullptr);
-  std::string line;
-  while (std::getline(file, line)) {
-    if (line.empty() || line[0] == '#') continue;
-    std::vector<std::string> fields;
-    size_t start = 0;
-    for (size_t tab; fields.size() < 5 && (tab = line.find('\t', start)) != std::string::npos; start = tab + 1)
-      fields.push_back(line.substr(start, tab - start));
-    fields.push_back(line.substr(start));  // The text is last and may itself be empty.
-    if (fields.size() != 6 || fields[4].empty()) continue;
-
-    char *end = nullptr;
-    const int zone_id = static_cast<int>(strtol(fields[0].c_str(), &end, 10));
-    if (*end) continue;
-    const int spawn_id = static_cast<int>(strtol(fields[1].c_str(), &end, 10));
-    if (*end) continue;
-    const long long last_seen = strtoll(fields[2].c_str(), &end, 10);
-    if (*end || now - last_seen > kSavedTagMaxAgeSeconds) continue;
-    const DWORD color = strtoul(fields[3].c_str(), &end, 16);
-    if (*end) continue;
-
-    auto &saved = (zone_id == kSavedPlayerZone) ? saved_player_tags[fields[4]] : saved_tags[{zone_id, spawn_id}];
-    if (saved.last_seen >= last_seen) continue;  // This session already has a newer copy.
-    saved = {.name = fields[4], .tag_text = fields[5], .tag_color = color, .last_seen = last_seen, .live_seen = false};
+    saved = {.name = fields[4],
+             .tag_text = fields[5],
+             .tag_color = color,
+             .last_seen = last_seen,
+             .live_seen = false,
+             .guild_mark = guild_mark,
+             .tag_image = tag_image};
   }
 }
 
@@ -1443,33 +1340,20 @@ void NamePlate::write_saved_tags() {
     std::ofstream file(temp_filename, std::ios::trunc);
     if (!file) return;
     file << "# Zeal nameplate tags (zone, spawn_id, last_seen, color, name, text; zone -1 is a player, by name)\n";
+    // The color, plus ":mark:picture" when the tag has a guild mark or a picture.
+    auto color_field = [](const SavedTag &tag) {
+      char hex[16];
+      snprintf(hex, sizeof(hex), "%x", static_cast<unsigned int>(tag.tag_color));
+      std::string field = hex;
+      if (tag.guild_mark || !tag.tag_image.empty()) field += (tag.guild_mark ? ":1:" : ":0:") + tag.tag_image;
+      return field;
+    };
     for (const auto &[key, tag] : saved_tags)
-      file << key.first << '\t' << key.second << '\t' << tag.last_seen << '\t' << std::hex << tag.tag_color << std::dec
-           << '\t' << tag.name << '\t' << tag.tag_text << '\n';
+      file << key.first << '\t' << key.second << '\t' << tag.last_seen << '\t' << color_field(tag) << '\t' << tag.name
+           << '\t' << tag.tag_text << '\n';
     for (const auto &[name, tag] : saved_player_tags)
-      file << kSavedPlayerZone << "\t0\t" << tag.last_seen << '\t' << std::hex << tag.tag_color << std::dec << '\t'
-           << name << '\t' << tag.tag_text << '\n';
-    if (!file) return;
-  }
-  std::error_code error;
-  std::filesystem::rename(temp_filename, saved_tags_filename, error);
-}
-
-// Writes to a temporary file and renames it over the old one, so a crash mid-write cannot leave a partial file.
-void NamePlate::write_saved_tags() {
-  saved_tags_dirty = false;
-  if (saved_tags_filename.empty()) return;
-  const std::string temp_filename = saved_tags_filename + ".tmp";
-  {
-    std::ofstream file(temp_filename, std::ios::trunc);
-    if (!file) return;
-    file << "# Zeal nameplate tags (zone, spawn_id, last_seen, color, name, text; zone -1 is a player, by name)\n";
-    for (const auto &[key, tag] : saved_tags)
-      file << key.first << '\t' << key.second << '\t' << tag.last_seen << '\t' << std::hex << tag.tag_color << std::dec
-           << '\t' << tag.name << '\t' << tag.tag_text << '\n';
-    for (const auto &[name, tag] : saved_player_tags)
-      file << kSavedPlayerZone << "\t0\t" << tag.last_seen << '\t' << std::hex << tag.tag_color << std::dec << '\t'
-           << name << '\t' << tag.tag_text << '\n';
+      file << kSavedPlayerZone << "\t0\t" << tag.last_seen << '\t' << color_field(tag) << '\t' << name << '\t'
+           << tag.tag_text << '\n';
     if (!file) return;
   }
   std::error_code error;
