@@ -705,15 +705,15 @@ Manual editing of the ini file is required to copy from old section to the new s
         `H` = shield (tank), `$` = dollar, `E` = euro
       - Numbered badges: `1` to `12` (e.g. `^7^`, `^12^`), readable from either side
       - Paw with a letter or digit on it: `P` then the character (e.g. `^PK^`), for a charmer's initial
-      - A guild's banner (a flag with its code) or icon: `B` or `I` then the guild's code (e.g. `^BEUR^`,
-        `^IMAY^`). `/tag guilds` lists the codes. An unknown code is read as the single letter (`^Blue^`
-        is still a blue arrow)
+      - A guild's banner (a flag with its code) or icon: `F` (for flag) or `I` then the guild's code (e.g.
+        `^FEUR^`, `^IMAY^`). `/tag guilds` lists the codes. An unknown code is read as the single letter
+        (`^Fire^` is still a flame, `^Blue^` a blue arrow)
       - A picture: `I` then the name of a `.png` or `.tga` file in `uifiles/zeal/tagicons` (e.g. `^IEUR^`
         for `EUR.png`), drawn flat and facing you. Names are 1 to 6 letters or digits; files up to 128
         pixels a side and 1 MB, with a transparent background. A picture takes over from a guild's
         built-in icon with the same code (`EUR.png`, or the whole key `IEUR.png`, for `^IEUR^`; Windows
         allows no file called `CON.png`, so `ICON.png` serves `^ICON^`), and one named for a banner key
-        takes over from that guild's banner (`BEUR.png` for `^BEUR^`). Only players who have the file see the
+        takes over from that guild's banner (`FEUR.png` for `^FEUR^`). Only players who have the file see the
         picture; others see the guild's built-in shape, or just the text. Your own pictures go in
         `uifiles/zeal/tagicons/custom`: nothing installs into it, and a picture there wins over one with the
         same name in `tagicons`, so it survives updates. `/tag icons` lists the pictures, marks yours,
@@ -721,7 +721,7 @@ Manual editing of the ini file is required to copy from old section to the new s
       - Clear any existing shape: `-`
 - Guild marks: `/tag guildmarks <off | tagged | auto>` (no argument shows the current mode; local only,
   never broadcast)
-  - `off` hides every guild banner and icon (`^B..^`, `^I..^`), including ones other players tagged. Plain
+  - `off` hides every guild banner and icon (`^F..^`, `^I..^`), including ones other players tagged. Plain
     symbols such as `^E^`, `^$^` and `^WP^` are not guild marks and still show
   - `tagged` (default) shows only the marks someone tagged
   - `auto` also draws each nearby player's own guild icon above their nameplate when the player has no tag
