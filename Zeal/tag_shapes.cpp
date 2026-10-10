@@ -777,13 +777,29 @@ std::vector<Part> ClawParts() {  // Savage.
   return parts;
 }
 
-std::vector<Part> MatchParts() {  // Burnouts.
+std::vector<Part> CigaretteParts() {  // Burnouts: a lit rolled cigarette lying at a slight diagonal, smoke rising.
+  // Drawn level along x (filter left, ember right) about z = 0, then lifted and tilted so the ember end is up.
+  const float hw = 0.27f;  // Half the width of the paper.
   std::vector<Part> parts;
-  parts.push_back(Flat(Rect(-0.1f, 0, 0.1f, 1.95f), Tone::Base, 0));
-  parts.push_back(Raised(Ellipse({0, 2.12f}, 0.2f, 0.3f, 16), {0, 2.12f}, Tone::Dark, 1));          // Burnt head.
-  parts.push_back(Raised(Ellipse({0.02f, 2.25f}, 0.07f, 0.07f, 8), {0.02f, 2.25f}, Tone::Eye, 2));  // Ember.
-  Append(parts, Stroke({{0.02f, 2.55f}, {0.2f, 2.75f}, {0.05f, 2.95f}, {0.25f, 3.15f}, {0.12f, 3.35f}}, 0.08f,
-                       Tone::Light, 0, false));  // Smoke.
+  parts.push_back(Flat(Rect(-1.3f, -hw, -0.5f, hw), Tone::Base, 0));                    // Filter (the guild's tan).
+  parts.push_back(Flat(Rect(-0.56f, -hw, -0.44f, hw), Tone::Dark, 1));                  // Tipping band.
+  parts.push_back(Flat(Rect(-0.44f, -hw, 0.8f, hw), Tone::Light, 0));                   // White paper.
+  parts.push_back(Flat(Rect(-0.44f, -hw, 0.8f, -hw + 0.08f), Tone::Shade, 1));          // Its shaded underside.
+  parts.push_back(Flat(Rect(0.8f, -hw, 0.9f, hw), Tone::Dark, 1));                      // Charred edge.
+  parts.push_back(Flat({{0.9f, -0.22f}, {1.16f, -0.18f}, {1.16f, 0.18f}, {0.9f, 0.22f}}, Tone::Shade, 1));  // Ash.
+  parts.push_back(Raised(Ellipse({1.22f, 0}, 0.17f, 0.23f, 14), {1.22f, 0}, Tone::Eye, 2));                 // Ember.
+  for (auto &part : parts) {
+    for (auto &point : part.outline) point.z += 1.0f;
+    part.center.z += 1.0f;
+  }
+  RotateParts(parts, 28 * kDeg, {0, 1.0f});
+  const Point ember = Rotate({1.3f, 1.0f}, 28 * kDeg, {0, 1.0f});
+  std::vector<Point> smoke;  // A wisp that curls as it rises.
+  for (int i = 0; i <= 8; ++i) {
+    const float t = static_cast<float>(i) / 8;
+    smoke.push_back({ember.x + 0.22f * sinf(2.2f * kPi * t) * (0.4f + t) + 0.05f, ember.z + 0.18f + 1.25f * t});
+  }
+  Append(parts, Stroke(smoke, 0.1f, Tone::Light, 0, false));
   return parts;
 }
 
@@ -1041,7 +1057,7 @@ std::vector<Part> GuildIconParts(int index) {
 
   static constexpr Icon kIcons[] = {
       {"MAY", LightningParts}, {"TRQ", LotusParts},    {"SOW", AcornParts},       {"INT", AnkhParts},
-      {"ECG", AnchorParts},    {"SAV", ClawParts},     {"BRN", MatchParts},       {"FG", CrownParts},
+      {"ECG", AnchorParts},    {"SAV", ClawParts},     {"BRN", CigaretteParts},   {"FG", CrownParts},
       {"AX", DeltaParts},      {"HVN", HouseParts},    {"FRE", BirdParts},        {"SOS", EyeParts},
       {"HC", TankardParts},    {"NOC", CrescentParts}, {"DND", D20Parts},         {"ZEK", AxeParts},
       {"DRF", WaveParts},      {"CON", InfinityParts}, {"ECL", EclipseParts},     {"NOV", NovaParts},
