@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <span>
 
@@ -10,7 +11,7 @@
 
 // Tag pictures: the file is checked before it is decoded, and the picture stands about as tall as the arrow.
 static constexpr uintmax_t kMaxImageFileBytes = 1024 * 1024;
-static constexpr unsigned int kMaxImagePixels = 512;  // On either side.
+static constexpr unsigned int kMaxImagePixels = 128;  // On either side.
 static constexpr float kImageHeight = 3.5f;           // World units (the arrow is 4 tall).
 static constexpr float kMaxImageAspect = 2.f;         // Wider pictures are squeezed to twice their height.
 
@@ -206,21 +207,28 @@ TagArrows::LoadedImage TagArrows::ReadImageFile(const std::string &filename) {
   unsigned int width = 0, height = 0;
   if (error || bytes == 0 || bytes > kMaxImageFileBytes || !ReadImageSize(filename, width, height) || width == 0 ||
       height == 0 || width > kMaxImagePixels || height > kMaxImagePixels) {
-    Zeal::Game::print_chat("Tag picture skipped (needs a PNG or TGA, up to %d pixels a side and 1 MB): %s",
-                           kMaxImagePixels, filename.c_str());
+    pending_messages.push_back(std::format(
+        "Tag picture skipped (needs a PNG or TGA, up to {} pixels a side and 1 MB): {}", kMaxImagePixels, filename));
     return {};
   }
   IDirect3DTexture8 *texture = nullptr;
   if (FAILED(D3DXCreateTextureFromFileExA(&device, filename.c_str(), D3DX_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0,
                                           D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, D3DX_DEFAULT, D3DX_DEFAULT, 0, nullptr,
                                           nullptr, &texture))) {
-    Zeal::Game::print_chat("Tag picture failed to load: %s", filename.c_str());
+    pending_messages.push_back("Tag picture failed to load: " + filename);
     return {};
   }
   return LoadedImage{.texture = texture, .aspect = min(kMaxImageAspect, static_cast<float>(width) / height)};
 }
 
+// Messages are held until drawing is done: printing to the chat window mid-frame is a hitch.
 void TagArrows::FlushQueueToScreen() {
+  FlushQueues();
+  for (const auto &message : pending_messages) Zeal::Game::print_chat("%s", message.c_str());
+  pending_messages.clear();
+}
+
+void TagArrows::FlushQueues() {
   if (!image_queue.empty()) {  // Pictures need none of the shape buffers below.
     RenderImages();
     image_queue.clear();

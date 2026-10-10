@@ -132,15 +132,18 @@ static std::map<std::string, std::filesystem::path> ScanTagImageFolder(const std
   std::map<std::string, std::filesystem::path> images;  // By lower-case code.
   try {
     for (const auto &entry : std::filesystem::directory_iterator(folder)) {
-      const std::string code = ToLower(entry.path().stem().string());
-      const std::string extension = ToLower(entry.path().extension().string());
-      if (!entry.is_regular_file() || (extension != ".png" && extension != ".tga") || code.empty() ||
-          code.size() > kMaxTagImageCode ||
-          !std::all_of(code.begin(), code.end(), [](unsigned char c) { return std::isalnum(c); }))
-        continue;
-      images.emplace(code, entry.path());  // With both EUR.png and EUR.tga, the first one listed wins.
+      try {  // A name with characters outside the ANSI code page makes string() throw: skip just that file.
+        const std::string code = ToLower(entry.path().stem().string());
+        const std::string extension = ToLower(entry.path().extension().string());
+        if (!entry.is_regular_file() || (extension != ".png" && extension != ".tga") || code.empty() ||
+            code.size() > kMaxTagImageCode ||
+            !std::all_of(code.begin(), code.end(), [](unsigned char c) { return std::isalnum(c); }))
+          continue;
+        images.emplace(code, entry.path());  // With both EUR.png and EUR.tga, the first one listed wins.
+      } catch (const std::exception &) {
+      }
     }
-  } catch (const std::filesystem::filesystem_error &) {
+  } catch (const std::exception &) {
     // No folder, or it can't be read: no pictures.
   }
   return images;
@@ -183,6 +186,22 @@ static const std::filesystem::path *GetTagImage(const std::string &key) {
     for (const auto &name : names)
       if (const auto it = folder->find(name); it != folder->end()) return &it->second;
   return nullptr;
+}
+
+// The narrow (ANSI) text of a path, else "" when it has characters the ANSI code page lacks (string() throws).
+static std::string PathText(const std::filesystem::path &path) {
+  try {
+    return path.string();
+  } catch (const std::exception &) {
+    return "";
+  }
+}
+
+// The file to draw for a picture key, resolved once when a tag is applied (and again after /tag icons), so
+// the render loop does no lookups. Empty when there is no picture.
+static std::string ResolveTagImageFile(const std::string &key) {
+  const auto *image = key.empty() ? nullptr : GetTagImage(key);
+  return image ? PathText(*image) : "";
 }
 
 // Every identity shape is found again from its tag color alone, so no two may share a color. Checked once at
@@ -772,18 +791,23 @@ void NamePlate::render_ui() {
 
     // The shape comes from the tag, else (auto mode) from the player's own guild. Off hides tagged guild marks.
     DWORD shape_color = info.tag_color;
-    if (info.guild_mark && guild_marks == kGuildMarksOff)
+    const std::string *image_file = &info.tag_image_file;
+    if (info.guild_mark && guild_marks == kGuildMarksOff) {
       shape_color = TagArrowColor::Off;
-    else if (shape_color == TagArrowColor::Off && guild_marks == kGuildMarksAuto)
-      shape_color = get_auto_guild_mark(*entity, self);
+    } else if (shape_color == TagArrowColor::Off && guild_marks == kGuildMarksAuto) {
+      if (const GuildMark *mark = get_auto_guild_mark(*entity, self)) {
+        shape_color = mark->color;
+        image_file = &mark->image_file;
+      }
+    }
 
     // If an explicit tag color was set, use that color otherwise use the nameplate color.
     if (show_tag && shape_color != TagArrowColor::Off) {
       auto tag_color = (shape_color == TagArrowColor::Nameplate) ? nameplate_color : shape_color;
       TagArrows::Shape shape = GetTagShape(shape_color);  // From the tag, so no nameplate color can match.
       position.z += sprite_font->get_text_height(full_text) + 1.5f;
-      const auto *image = info.tag_image.empty() ? nullptr : GetTagImage(info.tag_image);
-      if (image && tag_arrows->QueueTagImage(position, image->string())) continue;  // Drawn in place of a shape.
+      if (!image_file->empty() && tag_arrows->QueueTagImage(position, *image_file))
+        continue;  // Drawn in place of a shape.
       float bearing = (shape == TagArrows::Shape::Arrow) ? 0.0f : get_bearing(self, entity);
       tag_arrows->QueueTagShape(position, tag_color, shape, bearing);
       if (int glyph = GetPawGlyph(shape_color); glyph >= 0)  // The charmer's initial, over the paw's pad.
@@ -1467,14 +1491,16 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
     const auto custom = folder / kTagImageCustomFolder;
     try {
       std::filesystem::create_directories(custom);  // So a player can see where their own pictures go.
-    } catch (const std::filesystem::filesystem_error &) {
+    } catch (const std::exception &) {
     }
     const auto &set = GetTagImages(true);        // Reads the folders again, so new pictures count.
     if (tag_arrows) tag_arrows->ForgetImages();  // And changed pictures are loaded again.
+    guild_mark_cache.clear();                    // Automatic guild marks look their pictures up again.
+    for (auto &entry : nameplate_info_map) entry.second.tag_image_file = ResolveTagImageFile(entry.second.tag_image);
     Zeal::Game::print_chat("Tag pictures ^I<name>^ from %s (<name>.png or .tga, up to %d letters or digits):",
-                           folder.string().c_str(), static_cast<int>(kMaxTagImageCode));
+                           PathText(folder).c_str(), static_cast<int>(kMaxTagImageCode));
     Zeal::Game::print_chat("  Your own go in %s; one there replaces a picture with the same name.",
-                           custom.string().c_str());
+                           PathText(custom).c_str());
     std::map<std::string, std::filesystem::path> images = set.shipped;  // Listed by name, yours over shipped.
     for (const auto &[name, path] : set.custom) images.insert_or_assign(name, path);
     if (images.empty()) Zeal::Game::print_chat("  none found");
@@ -1482,7 +1508,7 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
     int count = 0;
     for (const auto &[code, path] : images) {
       const bool yours = set.custom.count(code) > 0;
-      line += std::string(line.empty() ? "" : ", ") + path.stem().string() + (yours ? " (yours)" : "");
+      line += std::string(line.empty() ? "" : ", ") + PathText(path.stem()) + (yours ? " (yours)" : "");
       if (++count % 10 == 0 || count == static_cast<int>(images.size())) {
         Zeal::Game::print_chat("  %s", line.c_str());
         line.clear();
@@ -1706,25 +1732,28 @@ static void RemoveTagTextField(const std::string &field_text, std::string &tag_t
   tag_text += "\n";
 }
 
-// Returns the tag color of the icon of a player's own guild (auto mode), else TagArrowColor::Off. Players that
-// are anonymous or roleplaying, far away, or in a guild that is not in kGuilds get nothing.
-DWORD NamePlate::get_auto_guild_mark(const Zeal::GameStructures::Entity &entity,
-                                     const Zeal::GameStructures::Entity *self) {
+// Returns the icon (and picture file, if the guild has one) of a player's own guild for auto mode, else nullptr.
+// Players that are anonymous or roleplaying, far away, or in a guild that is not in kGuilds get nothing.
+const NamePlate::GuildMark *NamePlate::get_auto_guild_mark(const Zeal::GameStructures::Entity &entity,
+                                                           const Zeal::GameStructures::Entity *self) {
   static constexpr float kMaxGuildMarkDist = 150.f;
   if (!self || entity.Type != Zeal::GameEnums::Player || entity.GuildId == -1 || entity.AnonymousState != 0)
-    return TagArrowColor::Off;
+    return nullptr;
   const float dx = entity.Position.x - self->Position.x;
   const float dy = entity.Position.y - self->Position.y;
-  if (dx * dx + dy * dy > kMaxGuildMarkDist * kMaxGuildMarkDist) return TagArrowColor::Off;
+  if (dx * dx + dy * dy > kMaxGuildMarkDist * kMaxGuildMarkDist) return nullptr;
 
   auto it = guild_mark_cache.find(entity.GuildId);
   if (it == guild_mark_cache.end()) {
-    DWORD color = TagArrowColor::Off;
+    GuildMark mark;
     const int guild = TagShapes::GuildIndexByName(Zeal::Game::get_player_guild_name(entity.GuildId));
-    if (guild >= 0) color = GetTagArrowColor(std::string("I") + TagShapes::kGuilds[guild].code);
-    it = guild_mark_cache.emplace(entity.GuildId, color).first;
+    if (guild >= 0) {
+      const std::string key = std::string("I") + TagShapes::kGuilds[guild].code;
+      mark = {.color = GetTagArrowColor(key), .image_file = ResolveTagImageFile(key)};
+    }
+    it = guild_mark_cache.emplace(entity.GuildId, std::move(mark)).first;
   }
-  return it->second;
+  return it->second.color == TagArrowColor::Off ? nullptr : &it->second;
 }
 
 // Parses "raw" (w/out any channel prefix like "Bob tells the raid, '") tag message to
@@ -1802,6 +1831,7 @@ bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_m
     it->second.tag_color = GetTagArrowColor(key);
     const bool image = GetTagImage(key) != nullptr;
     it->second.tag_image = image ? ToLower(key) : "";
+    it->second.tag_image_file = image ? ResolveTagImageFile(key) : "";
     if (image && it->second.tag_color == TagArrowColor::Off)
       it->second.tag_color = TagArrowColor::White;  // No built-in shape: a white arrow if the picture won't load.
     it->second.guild_mark = ReadGuildKey(key, 'b') >= 0 || ReadGuildKey(key, 'i') >= 0;
@@ -1811,6 +1841,7 @@ bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_m
                          (tag_text.empty() && it->second.tag_text.empty());
     it->second.tag_color = disable_arrow ? TagArrowColor::Off : TagArrowColor::Nameplate;
     it->second.tag_image.clear();  // A cleared picture tag must not come back with the default arrow.
+    it->second.tag_image_file.clear();
   }
 
   // Support skipping any unrecognized future prefix.
@@ -1980,7 +2011,7 @@ static std::string prettyprint_tag_message(const std::string &msg) {
     else if (key == "p" || key == "P")
       prefix += "Paw";
     else if (const auto *image = GetTagImage(key))
-      prefix += "Picture " + image->stem().string();
+      prefix += "Picture " + PathText(image->stem());
     else if (shape_name)
       prefix += shape_name;
     else

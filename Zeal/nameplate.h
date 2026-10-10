@@ -162,8 +162,9 @@ class NamePlate {
     DWORD color;
     DWORD tag_color;
     bool corpse_tag = false;  // The tag was set on the corpse (tags from before the death stay hidden).
-    std::string tag_image;    // Lower-case key of the tag's picture ("ieur" for EUR.png, "beur" for BEUR.png).
-    bool guild_mark = false;  // The tag_color came from a guild banner or icon key (^B..^, ^I..^).
+    std::string tag_image;       // Lower-case key of the tag's picture ("ieur" for EUR.png, "beur" for BEUR.png).
+    std::string tag_image_file;  // That picture's file, resolved when the tag is applied ("" if none).
+    bool guild_mark = false;     // The tag_color came from a guild banner or icon key (^B..^, ^I..^).
   };
 
   struct RenderInfo {
@@ -203,7 +204,15 @@ class NamePlate {
   void clear_saved_tags_in_zone();
   void load_saved_tags(const std::string &filename);
   void write_saved_tags();
-  DWORD get_auto_guild_mark(const Zeal::GameStructures::Entity &entity, const Zeal::GameStructures::Entity *self);
+
+  // What auto mode draws for a guild: its icon's tag color and its picture file ("" if none).
+  struct GuildMark {
+    DWORD color = 0;
+    std::string image_file;
+  };
+
+  const GuildMark *get_auto_guild_mark(const Zeal::GameStructures::Entity &entity,
+                                       const Zeal::GameStructures::Entity *self);
 
   void clean_ui();
   void render_ui();
@@ -212,7 +221,7 @@ class NamePlate {
   std::unique_ptr<SpriteFont> sprite_font;
   std::unique_ptr<class TagArrows> tag_arrows;
   std::unordered_map<struct Zeal::GameStructures::Entity *, NamePlateInfo> nameplate_info_map;
-  std::unordered_map<short, DWORD> guild_mark_cache;  // Guild id to its icon's tag color (Off if not in kGuilds).
+  std::unordered_map<short, GuildMark> guild_mark_cache;  // By guild id (color Off if the guild is not in kGuilds).
   std::function<void()> update_options_ui_callback;
   std::function<unsigned int(int)> get_color_callback;
   int tag_channel_number = -1;
