@@ -1355,7 +1355,7 @@ void NamePlate::load_saved_tags(const std::filesystem::path &filename) {
     if (*end) continue;
     long long last_seen = strtoll(fields[2].c_str(), &end, 10);
     if (*end || now - last_seen > kSavedTagMaxAgeSeconds) continue;
-    last_seen = std::min(last_seen, now);  // A time in the future would never expire.
+    last_seen = (std::min)(last_seen, now);  // A time in the future would never expire.
     const DWORD color = strtoul(fields[3].c_str(), &end, 16);
     bool guild_mark = false;
     std::string tag_image;  // Older files end the color here and have neither.
