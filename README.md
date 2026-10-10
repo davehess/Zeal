@@ -29,7 +29,7 @@ from the repo source, providing full transparency on the release contents.
 - Additional ui support (new gauges, bag control & locking, looting, spellsets, targetrings,
   nameplates, right click to equip, skill window sorting, ctrl for context menus/looting,
   tagging (text and shapes), raidbars, target of target, etc)
-- Autostand on move/cast, autosit on camp with export inventory/spellbook option,
+- Autostand on move/cast, autosit on camp with export inventory/spellbook/PoP flags option,
   enhanced autorun behavior option
 - Enhanced chat (% replacements, additional filters and colors, tell windows,
   tab completion, copy and paste, per character autojoin channels)
@@ -315,11 +315,13 @@ ___
 
 - `/outputfile`
   - **Aliases:** `/output`, `/out`
-  - **Arguments:** `inventory | spellbook | raidlist` `[optional_filename]`, `format [0 | 1]`
+  - **Arguments:** `inventory | spellbook | quarmy | popflags | raidlist` `[optional_filename]`, `format [0 | 1]`
   - **Example:** `/outputfile inventory my_inventory`
   - **Description:**
     - `inventory` outputs information about your equipment, inventory bag slots, held item, and bank slots to a file.
     - `spellbook` outputs a list of all spell ids current scribed in your spellbook.
+    - `popflags` sends `#popflags all` to the server and saves the lines it answers with to `<name>-PoPFlags.txt` after
+      about 3 seconds (nothing is written if the server does not answer). Also done by the "Export data on /camp" option.
     - `raidlist` outputs a raid 'tick' with a list of players in the raid.
     - `format` sets the format of the export files (0 = default, 1 = new style with host tag)
 

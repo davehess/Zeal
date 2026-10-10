@@ -44,6 +44,11 @@ Summarizes notable changes to Zeal
 * Guild banners use `^F<code>^` (F for flag), like `^FEUR^`; `^B<code>^` is no longer a banner key and is a blue
   arrow again. `^F^` alone is still the flame. A picture that replaces a banner is now named `F<code>.png`
 
+* The "Export data on /camp" option now also saves your `#popflags` output to `<name>-PoPFlags.txt`
+  - Sends `#popflags all` once per camp and writes the lines the server answers with, plus the character and a timestamp
+  - Nothing is written if the server does not answer
+  - Can also be run on demand with `/outputfile popflags [optional_filename]`
+
 ### Bug fixes
 
 * `/autoraidinvite` no longer builds a regular expression from the password, so passwords containing characters such
