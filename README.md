@@ -709,6 +709,15 @@ Manual editing of the ini file is required to copy from old section to the new s
         `^IMAY^`). `/tag guilds` lists the codes. An unknown code is read as the single letter (`^Blue^`
         is still a blue arrow)
       - Clear any existing shape: `-`
+- Guild marks: `/tag guildmarks <off | tagged | auto>` (no argument shows the current mode; local only,
+  never broadcast)
+  - `off` hides every guild banner and icon (`^B..^`, `^I..^`), including ones other players tagged. Plain
+    symbols such as `^E^`, `^$^` and `^WP^` are not guild marks and still show
+  - `tagged` (default) shows only the marks someone tagged
+  - `auto` also draws each nearby player's own guild icon above their nameplate when the player has no tag
+    shape of their own. Only for players in a guild listed by `/tag guilds`, within 150 units, who are not
+    anonymous or roleplaying. Needs Nameplates Zeal fonts; does not need `/tag on`. The guild is matched by its
+    full name as shown on the nameplate (`/tag guilds` lists them)
 - Tags can be cleared with:
   - `/tag clear`: Clears tag from current target if there is a target else all tags
   - `/tag local -`: Clears text only from current target locally (can also gsay, rsay, chat)

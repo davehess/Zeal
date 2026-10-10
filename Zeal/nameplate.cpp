@@ -107,6 +107,26 @@ static int GetGuildIcon(DWORD tag_color) {
   return -1;
 }
 
+// Every identity shape is found again from its tag color alone, so no two may share a color. Checked once at
+// startup (the guild colors come from a table, so a static_assert cannot see them).
+static bool TagColorsAreUnique() {
+  std::vector<DWORD> colors = {TagArrowColor::Paw,    TagArrowColor::StopSign, TagArrowColor::Skull,
+                               TagArrowColor::Cross,  TagArrowColor::Sword,    TagArrowColor::Diamond,
+                               TagArrowColor::Flame,  TagArrowColor::Star,     TagArrowColor::Wolf,
+                               TagArrowColor::Moon,   TagArrowColor::Lasso,    TagArrowColor::Lute,
+                               TagArrowColor::Shield, TagArrowColor::Dollar,   TagArrowColor::Euro,
+                               TagArrowColor::Red,    TagArrowColor::Orange,   TagArrowColor::Yellow,
+                               TagArrowColor::Green,  TagArrowColor::Blue,     TagArrowColor::White};
+  for (int number = 1; number <= kMaxTagNumber; ++number) colors.push_back(GetNumberColor(number));
+  for (int glyph = 0; glyph < kPawGlyphCount; ++glyph) colors.push_back(kPawGlyphColorBase + glyph);
+  for (int i = 0; i < TagShapes::kGuildCount; ++i) {
+    colors.push_back(GetGuildBannerColor(i));
+    if (!TagShapes::kGuilds[i].icon_key) colors.push_back(GetGuildIconColor(i));
+  }
+  std::sort(colors.begin(), colors.end());
+  return std::adjacent_find(colors.begin(), colors.end()) == colors.end();
+}
+
 // Display name of an icon, numbered or lettered shape (nullptr for the arrows, plain paw and stop sign).
 static const char *GetShapeName(DWORD tag_color) {
   if (int number = GetTagNumber(tag_color)) return kNumberNames[number - 1];
@@ -376,6 +396,8 @@ int __fastcall TargetWnd_PostDraw(Zeal::GameUI::SidlWnd *this_ptr, void *not_use
 NamePlate::NamePlate(ZealService *zeal) {
   // mem::write<byte>(0x4B0B3D, 0); //arg 2 for SetStringSpriteYonClip (extended nameplate)
 
+  if (!TagColorsAreUnique()) OutputDebugStringA("Zeal: two tag shapes share an identity color\n");
+
   zeal->hooks->Add("SetNameSpriteState", 0x4B0BD9, SetNameSpriteState, hook_type_detour);
   zeal->hooks->Add("SetNameSpriteTint", 0x4B114D, SetNameSpriteTint, hook_type_detour);
   zeal->hooks->Add("TargetWnd_PostDraw", 0x005e6f78, TargetWnd_PostDraw, hook_type_vtable);
@@ -530,6 +552,7 @@ void NamePlate::load_sprite_font() {
 
 void NamePlate::clean_ui() {
   nameplate_info_map.clear();
+  guild_mark_cache.clear();
   sprite_font.reset();      // Relying on spritefont destructor to be invoked to release resources.
   tag_arrows.reset();       // Also relying on destructor to release resources.
   tag_channel_number = -1;  // Force a reset.
@@ -613,6 +636,7 @@ void NamePlate::render_ui() {
   if (self && *Zeal::Game::camera_view != Zeal::GameEnums::CameraView::FirstPerson && Zeal::Game::is_targetable(self))
     visible_entities.push_back(self);  // Add self nameplate.
 
+  const int guild_marks = setting_tag_guild_marks.get();
   std::vector<RenderInfo> render_list;
   for (const auto &entity : visible_entities) {
     // Added Unknown0003 check due to some bad results with 0x05 at startup causing a crash.
@@ -656,14 +680,21 @@ void NamePlate::render_ui() {
     auto nameplate_color = info.color | 0xff000000;
     if (!full_text.empty()) sprite_font->queue_string(full_text.c_str(), position, true, nameplate_color);
 
+    // The shape comes from the tag, else (auto mode) from the player's own guild. Off hides tagged guild marks.
+    DWORD shape_color = info.tag_color;
+    if (info.guild_mark && guild_marks == kGuildMarksOff)
+      shape_color = TagArrowColor::Off;
+    else if (shape_color == TagArrowColor::Off && guild_marks == kGuildMarksAuto)
+      shape_color = get_auto_guild_mark(*entity, self);
+
     // If an explicit tag color was set, use that color otherwise use the nameplate color.
-    if (!is_corpse && info.tag_color != TagArrowColor::Off) {
-      auto tag_color = (info.tag_color == TagArrowColor::Nameplate) ? nameplate_color : info.tag_color;
-      TagArrows::Shape shape = GetTagShape(info.tag_color);  // From the tag, so no nameplate color can match.
+    if (!is_corpse && shape_color != TagArrowColor::Off) {
+      auto tag_color = (shape_color == TagArrowColor::Nameplate) ? nameplate_color : shape_color;
+      TagArrows::Shape shape = GetTagShape(shape_color);  // From the tag, so no nameplate color can match.
       position.z += sprite_font->get_text_height(full_text) + 1.5f;
       float bearing = (shape == TagArrows::Shape::Arrow) ? 0.0f : get_bearing(self, entity);
       tag_arrows->QueueTagShape(position, tag_color, shape, bearing);
-      if (int glyph = GetPawGlyph(info.tag_color); glyph >= 0)  // The charmer's initial, over the paw's pad.
+      if (int glyph = GetPawGlyph(shape_color); glyph >= 0)  // The charmer's initial, over the paw's pad.
         tag_arrows->QueueTagShape(position, tag_color,
                                   static_cast<TagArrows::Shape>(static_cast<int>(TagArrows::Shape::Glyph0) + glyph),
                                   bearing);
@@ -1028,6 +1059,7 @@ void NamePlate::clear_tags() {
   for (auto &pair : nameplate_info_map) {
     pair.second.tag_text = "";
     pair.second.tag_color = TagArrowColor::Off;
+    pair.second.guild_mark = false;
   }
 }
 
@@ -1148,6 +1180,15 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
     return;
   }
 
+  if (args.size() >= 2 && args[1] == "guildmarks") {
+    static constexpr const char *kModeNames[] = {"off", "tagged", "auto"};
+    for (int mode = 0; args.size() > 2 && mode < 3; ++mode)
+      if (args[2] == kModeNames[mode]) setting_tag_guild_marks.set(mode);
+    const int mode = std::clamp(setting_tag_guild_marks.get(), 0, 2);
+    Zeal::Game::print_chat("Tag guild marks: %s (off | tagged | auto)", kModeNames[mode]);
+    return;
+  }
+
   if (args.size() == 3 && args[1] == "channel") {
     broadcast_tag_set_channel(args[2]);
     return;
@@ -1173,6 +1214,7 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
       if (it != nameplate_info_map.end()) {
         it->second.tag_text = "";
         it->second.tag_color = TagArrowColor::Off;
+        it->second.guild_mark = false;
       }
       Zeal::Game::print_chat("Target nameplate tag cleared");
       return;
@@ -1241,6 +1283,7 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
 
   Zeal::Game::print_chat("Usage: /tag <on | off | clear>");
   Zeal::Game::print_chat("Usage: /tag <tooltip | filter | suppress | prettyprint> <on | off>");
+  Zeal::Game::print_chat("Usage: /tag guildmarks <off | tagged | auto> (hide all, tagged only, or tagged + automatic)");
   Zeal::Game::print_chat("Usage: /tag target <text_to_match>");
   Zeal::Game::print_chat("Usage: /tag <gsay | rsay | rsgs | chat | local> <message | clear | channel>");
   Zeal::Game::print_chat("Usage: <message> prefixes: '+' to append, '^R^' or '*R:' for color arrow (R, O, Y, G, B, W)");
@@ -1376,6 +1419,27 @@ static void RemoveTagTextField(const std::string &field_text, std::string &tag_t
   tag_text += "\n";
 }
 
+// Returns the tag color of the icon of a player's own guild (auto mode), else TagArrowColor::Off. Players that
+// are anonymous or roleplaying, far away, or in a guild that is not in kGuilds get nothing.
+DWORD NamePlate::get_auto_guild_mark(const Zeal::GameStructures::Entity &entity,
+                                     const Zeal::GameStructures::Entity *self) {
+  static constexpr float kMaxGuildMarkDist = 150.f;
+  if (!self || entity.Type != Zeal::GameEnums::Player || entity.GuildId == -1 || entity.AnonymousState != 0)
+    return TagArrowColor::Off;
+  const float dx = entity.Position.x - self->Position.x;
+  const float dy = entity.Position.y - self->Position.y;
+  if (dx * dx + dy * dy > kMaxGuildMarkDist * kMaxGuildMarkDist) return TagArrowColor::Off;
+
+  auto it = guild_mark_cache.find(entity.GuildId);
+  if (it == guild_mark_cache.end()) {
+    DWORD color = TagArrowColor::Off;
+    const int guild = TagShapes::GuildIndexByName(Zeal::Game::get_player_guild_name(entity.GuildId));
+    if (guild >= 0) color = GetTagArrowColor(std::string("I") + TagShapes::kGuilds[guild].code);
+    it = guild_mark_cache.emplace(entity.GuildId, color).first;
+  }
+  return it->second;
+}
+
 // Parses "raw" (w/out any channel prefix like "Bob tells the raid, '") tag message to
 // confirm it is in a valid format and if apply is true updates the nameplate info map.
 bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_missing_spawn) {
@@ -1439,6 +1503,7 @@ bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_m
   if (tag_text.size() > 2 && tag_text[0] == '^') {
     const std::string key = ReadTagKey(tag_text);
     it->second.tag_color = GetTagArrowColor(key);
+    it->second.guild_mark = ReadGuildKey(key, 'b') >= 0 || ReadGuildKey(key, 'i') >= 0;
     tag_text = tag_text.substr(1 + key.size());
   } else if (it->second.tag_color == TagArrowColor::Off || it->second.tag_color == TagArrowColor::Nameplate) {
     bool disable_arrow = !setting_tag_default_arrow.get() || entity->Type != Zeal::GameEnums::NPC ||
