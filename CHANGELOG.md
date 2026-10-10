@@ -9,7 +9,7 @@ Summarizes notable changes to Zeal
 
 * The "Export data on /camp" option now also saves your `#popflags` output to `<name>-PoPFlags.txt`
   - Sends `#popflags` and `#popflags 1` to `5` once per camp (`all` is limited to server staff) and writes the lines the
-    server answers with, plus the character and a timestamp
+    server answers with, plus the character and a timestamp. The reply goes to the file, not the chat window
   - Nothing is written if the server does not answer
   - Can also be run on demand with `/outputfile popflags [optional_filename]`
 

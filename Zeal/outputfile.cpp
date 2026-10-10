@@ -444,13 +444,13 @@ void OutputFile::write_to_file(std::string data, std::string file_arg, std::stri
 }
 
 // The #popflags reply is plain server text and Zeal only sees it as incoming chat. So the export is a capture
-// window: send the commands, keep the server-coloured chat lines that arrive until a few seconds after the last
-// one, then write them. Nothing waits on the reply and the reply is not hidden from the player's chat.
-// "#popflags all" is limited to server staff, so a player gets the full picture as the overview plus each tier.
+// window: send the commands, keep the server's reply lines until shortly after the last one, then write them.
+// The captured lines go to the file instead of the chat window. Nothing waits on the reply. "#popflags all" is
+// limited to server staff, so a player gets the overview plus each tier.
 static constexpr const char *kPopFlagsCommands[] = {"#popflags", "#popflags 1", "#popflags 2",
                                                     "#popflags 3", "#popflags 4", "#popflags 5"};
-static constexpr int kPopFlagsSpacingMs = 1000;             // Gap between the commands, to stay gentle on the server.
-static constexpr int kPopFlagsCaptureMs = 3000;             // Window for the last reply to arrive.
+static constexpr int kPopFlagsSpacingMs = 250;              // Gap between the commands, to stay gentle on the server.
+static constexpr int kPopFlagsCaptureMs = 1500;             // Window for the last reply to arrive.
 static constexpr ULONGLONG kPopFlagsMinIntervalMs = 15000;  // Never start a new request sooner than this.
 static constexpr size_t kPopFlagsMaxLines = 400;            // Safety cap on a runaway capture.
 
@@ -485,31 +485,37 @@ void OutputFile::export_popflags(const std::vector<std::string> &args, bool verb
   popflags_lines.clear();
   popflags_pending = true;
 
-  // Hide the local echo like the other # commands that Zeal sends. The reply itself is not suppressed. Every
-  // delayed send is scheduled here, never from inside a delayed callback (AddDelayed must not be re-entered).
+  // Hide the local echo like the other # commands that Zeal sends. Every delayed send is scheduled here, never from
+  // inside a delayed callback (AddDelayed must not be re-entered). A delayed callback can run on more than one frame
+  // (it fires at >= its time but is removed only once the tick count passes it), so each send checks its turn.
   auto *callbacks = ZealService::get_instance()->callbacks.get();
   const int count = static_cast<int>(std::size(kPopFlagsCommands));
   Zeal::Game::do_say(true, kPopFlagsCommands[0]);
+  popflags_sent = 1;
   for (int i = 1; i < count; ++i) {
-    const char *command = kPopFlagsCommands[i];
     callbacks->AddDelayed(
-        [this, command]() {
-          if (popflags_pending && Zeal::Game::is_in_game()) Zeal::Game::do_say(true, command);
+        [this, i]() {
+          if (!popflags_pending || popflags_sent != i || !Zeal::Game::is_in_game()) return;
+          popflags_sent = i + 1;
+          Zeal::Game::do_say(true, kPopFlagsCommands[i]);
         },
         i * kPopFlagsSpacingMs);
   }
   callbacks->AddDelayed([this]() { popflags_finish(); }, (count - 1) * kPopFlagsSpacingMs + kPopFlagsCaptureMs);
 }
 
-void OutputFile::popflags_capture(const std::string &msg, short channel) {
+void OutputFile::popflags_capture(std::string &msg, short channel) {
   if (!popflags_pending || msg.empty() || popflags_lines.size() >= kPopFlagsMaxLines) return;
-  // Server text arrives with a small colour id. Player chat, combat, spells and loot use the 0x100+ user colours
-  // and NPC dialogue uses the quest-say colour, so none of those can be part of the reply.
-  if (channel > 0xFF || channel == CHATCOLOR_NPCQUESTSAY) return;
+  // The reply uses only these four server colours. Player chat, combat, spells and loot use the 0x100+ user colours
+  // and NPC dialogue the quest-say colour, so none of those are taken.
+  if (channel != CHATCOLOR_WHITE && channel != CHATCOLOR_LIME && channel != CHATCOLOR_YELLOW &&
+      channel != CHATCOLOR_RED)
+    return;
   // The camp's own messages arrive during the window and are not flags.
   if (msg.find("prepare your camp") != std::string::npos || msg.find("preparations to camp") != std::string::npos)
     return;
   popflags_lines.push_back(PopFlagsStripTimestamp(msg));
+  msg.clear();  // Keep the reply out of the chat window (the same suppression nameplate.cpp uses).
 }
 
 void OutputFile::popflags_finish() {
