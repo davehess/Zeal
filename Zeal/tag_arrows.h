@@ -38,6 +38,7 @@ class TagArrows {
     BannerLast = 93,
     GuildIcon0 = 94,  // Guild icons, in TagShapes::kGuilds order, up to GuildIconLast.
     GuildIconLast = 123,
+    Crosshair = 124,  // The main assist's target ring with four arrows pointing in (TagShapes::Kind::Crosshair).
   };
 
   // Vertices allow texturing and color modulation.

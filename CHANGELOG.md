@@ -3,6 +3,21 @@
 Summarizes notable changes to Zeal
 
 
+## [Unreleased]
+
+### New features
+
+* Added `%tid` (or `%targetid`) chat % replacement for the target's spawn id (empty without a target)
+
+* `/target <text>` now targets a visible entity whose `/tag` text matches `<text>` exactly (same match as
+  `/tag target`), else runs the normal `/target`
+
+* `/tag target ^KEY^` (and `/target ^KEY^`) matches a tag shape, which also finds players
+
+* Added a main assist tag shape `^MA^`: a target ring with four arrows pointing in at it. Only one
+  nameplate carries it at a time; tagging a new one removes it from the previous holder
+
+
 ## [1.4.8] - 2026/10/01
 
 ### New features

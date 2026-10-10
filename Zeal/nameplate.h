@@ -160,6 +160,7 @@ class NamePlate {
   void handle_targetwnd_postdraw(Zeal::GameUI::SidlWnd *wnd) const;
   void handle_entity_destructor(Zeal::GameStructures::Entity *entity);
   bool handle_shownames_command(const std::vector<std::string> &args);
+  bool handle_target_command(const std::vector<std::string> &args);
   int get_shownames() const;
 
  private:
@@ -193,6 +194,7 @@ class NamePlate {
   bool is_hp_updated(const Zeal::GameStructures::Entity *entity) const;
   void handle_tag_command(const std::vector<std::string> &args);
   bool handle_tag_target(const std::string &target_text);
+  void drop_other_main_assists(const Zeal::GameStructures::Entity *keep);
   bool handle_zeal_spam_filter(short &channel, std::string &msg);
   void enable_tags(bool enable);
   void clear_tags();

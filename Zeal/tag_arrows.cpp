@@ -718,7 +718,9 @@ static_assert(static_cast<int>(TagArrows::Shape::Banner0) - static_cast<int>(Tag
               static_cast<int>(TagShapes::Kind::Banner0));
 static_assert(static_cast<int>(TagArrows::Shape::GuildIcon0) - static_cast<int>(TagArrows::Shape::Skull) ==
               static_cast<int>(TagShapes::Kind::GuildIcon0));
-static_assert(static_cast<int>(TagArrows::Shape::GuildIconLast) - static_cast<int>(TagArrows::Shape::Skull) + 1 ==
+static_assert(static_cast<int>(TagArrows::Shape::Crosshair) - static_cast<int>(TagArrows::Shape::Skull) ==
+              static_cast<int>(TagShapes::Kind::Crosshair));
+static_assert(static_cast<int>(TagArrows::Shape::Crosshair) - static_cast<int>(TagArrows::Shape::Skull) + 1 ==
               static_cast<int>(TagShapes::Kind::Count));
 
 static constexpr D3DCOLOR kEyeYellow = D3DCOLOR_XRGB(0xff, 0xcf, 0x5c);  // The Wolf Pack wolf's eyes.

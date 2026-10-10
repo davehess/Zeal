@@ -1029,6 +1029,14 @@ void Chat::InitPercentReplacements() {
     Zeal::String::replace(str_data, "%targethp", target_hp + "%");
     Zeal::String::replace(str_data, "%th", target_hp + "%");
   });
+  // The target's spawn id (empty without a target), the number /tag and Zeal's pipe use to tell two mobs with
+  // the same name apart. Runs wherever the other codes do, so it works in /pipe, /log, chat and macros.
+  percent_replacements.push_back([](std::string &str_data) {
+    const auto target = Zeal::Game::get_target();
+    const std::string spawn_id = target ? std::to_string(static_cast<int>(target->SpawnId)) : "";
+    Zeal::String::replace(str_data, "%targetid", spawn_id);
+    Zeal::String::replace(str_data, "%tid", spawn_id);
+  });
 }
 
 void Chat::handle_incoming_gsay(const char *msg) {

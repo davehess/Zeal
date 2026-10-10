@@ -9,6 +9,7 @@
 #include "game_structures.h"
 #include "hook_wrapper.h"
 #include "memory.h"
+#include "nameplate.h"
 #include "string_util.h"
 #include "zeal.h"
 
@@ -129,14 +130,17 @@ ChatCommands::ChatCommands(ZealService *zeal) {
     return false;
   });
   Add("/target", {"/cleartarget"},
-      "Adds clear target functionality to the /target command if you give it no arguments.",
+      "Adds clear target functionality to the /target command if you give it no arguments, and targets a visible "
+      "tagged entity whose tag text matches (see /tag).",
       [](std::vector<std::string> &args) {
         if (args.size() == 1) {
           Zeal::Game::set_target(0);
           return true;  // return true to stop the game from processing any further on this command, false if you want
                         // to just add features to an existing cmd
         }
-        return false;
+        // "/target foo" goes to the visible entity tagged "foo" (see /tag), else the game's own /target runs.
+        auto nameplate = ZealService::get_instance()->nameplate.get();
+        return nameplate && nameplate->handle_target_command(args);
       });
   Add("/cls", {}, "Adds cls alias for clearchat.", [](std::vector<std::string> &args) {
     ForwardCommand("/clearchat");

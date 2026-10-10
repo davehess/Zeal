@@ -297,6 +297,38 @@ std::vector<Part> ShieldParts() {
   return parts;
 }
 
+std::vector<Part> CrosshairParts() {
+  // The main assist: a target ring with a dot and hairlines in it, and four arrows (up, down, left, right)
+  // that point in at the ring. Symmetric, so it reads the same from behind and at any bearing.
+  const Point center = {0, 1.6f};  // The outermost arrow ends reach z = 0 and z = 3.2.
+  constexpr float kRingRadius = 0.78f;
+  constexpr float kTipDistance = 0.98f;  // Where an arrow's point sits, a gap outside the ring's outer edge.
+  constexpr float kHeadLength = 0.5f;    // From the point to the base of the head.
+  constexpr float kHeadHalfWidth = 0.36f;
+  constexpr float kShaftLength = 0.3f;  // From the arrow's end in under the head, so the two read as one.
+  constexpr float kShaftWidth = 0.18f;
+  std::vector<Part> parts;
+  for (auto &part : Stroke(Ellipse(center, kRingRadius, kRingRadius, 40), 0.2f, Tone::Base, 0, true))
+    parts.push_back(std::move(part));
+  parts.push_back(Raised(Ellipse(center, 0.15f, 0.15f, 16), center, Tone::Light, 1));                      // Bullseye.
+  parts.push_back(Raised(Rect(-0.04f, center.z - 0.6f, 0.04f, center.z + 0.6f), center, Tone::Light, 1));  // Hairlines.
+  parts.push_back(Raised(Rect(-0.6f, center.z - 0.04f, 0.6f, center.z + 0.04f), center, Tone::Light, 1));
+  for (int i = 0; i < 4; ++i) {
+    const float angle = kPi / 2 * static_cast<float>(i);
+    const float dx = cosf(angle), dz = sinf(angle);  // Outward from the center; the arrow points back along it.
+    const float px = -dz, pz = dx;                   // A quarter turn counter-clockwise from that.
+    auto at = [&](float distance, float side) {
+      return Point{center.x + dx * distance + px * side, center.z + dz * distance + pz * side};
+    };
+    const float base = kTipDistance + kHeadLength;
+    const std::vector<Point> head = {at(kTipDistance, 0), at(base, -kHeadHalfWidth), at(base, kHeadHalfWidth)};
+    parts.push_back({head, at(kTipDistance + kHeadLength / 3, 0)});  // Counter-clockwise, centered for the fan.
+    const Point shaft = at(center.z - kShaftLength / 2, 0);  // The arrow ends center.z out, at z = 0 for the lowest.
+    parts.push_back({Bar(shaft, kShaftLength, kShaftWidth, angle), shaft});
+  }
+  return parts;
+}
+
 std::vector<Part> LuteParts() {
   // A lute, built upright (neck up) and then tilted like the bard's instrument in hand.
   std::vector<Part> parts;
@@ -1090,6 +1122,9 @@ Mesh Build(Kind kind) {
       break;
     case Kind::Euro:
       parts = EuroParts();
+      break;
+    case Kind::Crosshair:
+      parts = CrosshairParts();
       break;
     default:
       if (kind >= Kind::Number1 && kind <= Kind::Number12)

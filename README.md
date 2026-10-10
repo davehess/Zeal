@@ -60,6 +60,8 @@ from the repo source, providing full transparency on the release contents.
 - %h or %hp for hp%
 - %loc for your location
 - %th or %targethp for your targets health %
+- %tid or %targetid for your target's spawn id (empty without a target); works wherever the codes above do,
+  including `/pipe`
 
 ### Commands (`/help zeal`)
 ___
@@ -711,7 +713,9 @@ Manual editing of the ini file is required to copy from old section to the new s
       - Red stop sign (octagon): `S`
       - Icon shapes: `K` = skull, `X` = red X, `A` = gold sword, `D` = blue diamond, `F` = green flame,
         `T` = purple star, `WP` = wolf (`^WP^`), `M` = moon (mez), `U` = lasso (pull), `N` = lute (bard),
-        `H` = shield (tank), `$` = dollar, `E` = euro
+        `H` = shield (tank), `$` = dollar, `E` = euro, `MA` = main assist (a target ring with four arrows
+        pointing in at it; only one at a time, a new `^MA^` takes it off whoever had it; clients before this
+        one show the moon)
       - Numbered badges: `1` to `12` (e.g. `^7^`, `^12^`), readable from either side
       - Paw with a letter or digit on it: `P` then the character (e.g. `^PK^`), for a charmer's initial
       - A guild's banner (a flag with its code) or icon: `B` or `I` then the guild's code (e.g. `^BEUR^`,
@@ -760,6 +764,13 @@ Manual editing of the ini file is required to copy from old section to the new s
   - Matches `<text>` against each tag text field after splitting by delimiter (' | ')
   - Requires the NPC to be tab targettable to succeed
   - Targets closest NPC if multiple matches
+  - `/target <text>` tries the same match first (when tags are on) and falls back to the game's own `/target`
+    when no tag matches
+  - `<text>` of the form `^KEY^` (like `/target ^MA^`) matches a shape instead of text, and also finds
+    players, whose tags carry a shape but no text. Anyone tagging themselves (target yourself, then
+    `/tag chat ^MA^`) can be found this way by everyone on the channel; you can't target yourself this way
+  - Note: `/tag <rsay | gsay | chat> clear` clears every tag for everyone receiving it, so don't use it to
+    hand over a role; a new `^MA^` already takes the shape off the previous holder
 - International keyboard support:
   - Nameplate Tab Alternate Symbols options allows `*` in place of `^`.
 - Tags are kept through zoning, a character switch, a device reset and a client crash (`/tag persist <on | off>`,

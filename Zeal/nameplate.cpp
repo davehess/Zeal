@@ -46,7 +46,7 @@ enum TagArrowColor : DWORD {
   Nameplate = 1,
   Paw = D3DCOLOR_XRGB(0x20, 0xc0, 0x20),       // Ensure this is unique.
   StopSign = D3DCOLOR_XRGB(0xf0, 0x00, 0x00),  // Ensure this is unique.
-  Skull = D3DCOLOR_XRGB(0xe8, 0xe2, 0xd1),     // Icon shapes (keys K X A D F T WP M U N H $ E): ensure unique.
+  Skull = D3DCOLOR_XRGB(0xe8, 0xe2, 0xd1),     // Icon shapes (keys K X A D F T WP M U N H $ E MA): ensure unique.
   Cross = D3DCOLOR_XRGB(0xe8, 0x1c, 0x1c),
   Sword = D3DCOLOR_XRGB(0xf2, 0xc0, 0x2a),
   Diamond = D3DCOLOR_XRGB(0x2e, 0x8c, 0xf5),
@@ -59,6 +59,7 @@ enum TagArrowColor : DWORD {
   Shield = D3DCOLOR_XRGB(0xa8, 0xb0, 0xbc),
   Dollar = D3DCOLOR_XRGB(0x3a, 0xb0, 0x5a),
   Euro = D3DCOLOR_XRGB(0xe8, 0xa0, 0x20),
+  MainAssist = D3DCOLOR_XRGB(0x18, 0xd8, 0xd0),  // Key MA (a target ring with four arrows): ensure unique.
   Red = D3DCOLOR_XRGB(0xff, 0, 0),
   Orange = D3DCOLOR_XRGB(0xff, 0x80, 0),
   Yellow = D3DCOLOR_XRGB(0xff, 0xff, 0),
@@ -208,13 +209,13 @@ static std::string ResolveTagImageFile(const std::string &key) {
 // Every identity shape is found again from its tag color alone, so no two may share a color. Checked once at
 // startup (the guild colors come from a table, so a static_assert cannot see them).
 static bool TagColorsAreUnique() {
-  std::vector<DWORD> colors = {TagArrowColor::Paw,    TagArrowColor::StopSign, TagArrowColor::Skull,
-                               TagArrowColor::Cross,  TagArrowColor::Sword,    TagArrowColor::Diamond,
-                               TagArrowColor::Flame,  TagArrowColor::Star,     TagArrowColor::Wolf,
-                               TagArrowColor::Moon,   TagArrowColor::Lasso,    TagArrowColor::Lute,
-                               TagArrowColor::Shield, TagArrowColor::Dollar,   TagArrowColor::Euro,
-                               TagArrowColor::Red,    TagArrowColor::Orange,   TagArrowColor::Yellow,
-                               TagArrowColor::Green,  TagArrowColor::Blue,     TagArrowColor::White};
+  std::vector<DWORD> colors = {
+      TagArrowColor::Paw,    TagArrowColor::StopSign, TagArrowColor::Skull,  TagArrowColor::Cross,
+      TagArrowColor::Sword,  TagArrowColor::Diamond,  TagArrowColor::Flame,  TagArrowColor::Star,
+      TagArrowColor::Wolf,   TagArrowColor::Moon,     TagArrowColor::Lasso,  TagArrowColor::Lute,
+      TagArrowColor::Shield, TagArrowColor::Dollar,   TagArrowColor::Euro,   TagArrowColor::MainAssist,
+      TagArrowColor::Red,    TagArrowColor::Orange,   TagArrowColor::Yellow, TagArrowColor::Green,
+      TagArrowColor::Blue,   TagArrowColor::White};
   for (int number = 1; number <= kMaxTagNumber; ++number) colors.push_back(GetNumberColor(number));
   for (int glyph = 0; glyph < kPawGlyphCount; ++glyph) colors.push_back(kPawGlyphColorBase + glyph);
   for (int i = 0; i < TagShapes::kGuildCount; ++i) {
@@ -271,6 +272,8 @@ static const char *GetShapeName(DWORD tag_color) {
       return "Dollar";
     case TagArrowColor::Euro:
       return "Euro";
+    case TagArrowColor::MainAssist:
+      return "Main Assist";
     default:
       break;
   }
@@ -317,6 +320,8 @@ static TagArrows::Shape GetTagShape(DWORD tag_color) {
       return TagArrows::Shape::Dollar;
     case TagArrowColor::Euro:
       return TagArrows::Shape::Euro;
+    case TagArrowColor::MainAssist:
+      return TagArrows::Shape::Crosshair;
     default:
       break;
   }
@@ -1470,18 +1475,43 @@ static bool distance_comparison(const Zeal::GameStructures::Entity *a, const Zea
   return distance_a <= distance_b;  // No reason to do the sqrt().
 }
 
+static std::string ReadTagKey(const std::string &text);
+static D3DCOLOR GetTagArrowColor(const std::string &key);
+
+// A target of the form "^KEY^" (like "^MA^") names a shape rather than text. A player's tag has a shape but no
+// text, so this is the only way to find one. Returns that shape's tag color, else TagArrowColor::Off.
+static DWORD ReadTagShapeTarget(const std::string &target_text) {
+  if (target_text.size() < 3 || target_text.front() != '^' || target_text.back() != '^') return TagArrowColor::Off;
+  const std::string key = ReadTagKey(target_text);
+  return (key.size() + 2 == target_text.size()) ? GetTagArrowColor(key) : TagArrowColor::Off;
+}
+
 bool NamePlate::handle_tag_target(const std::string &target_text) {
-  // Scan all nameplates for tag_text that contains the target text.
+  // Scan all nameplates for tag_text that contains the target text (or, for "^KEY^", that carries the shape).
   std::vector<Zeal::GameStructures::Entity *> matches;
+  const DWORD shape_match = ReadTagShapeTarget(target_text);
   for (const auto &entry : nameplate_info_map) {
     const auto &tag_text = entry.second.tag_text;
-    if (!entry.first || tag_text.empty() || tag_text.find(target_text) == std::string::npos) continue;
+    if (!entry.first) continue;
+    if (shape_match != TagArrowColor::Off) {
+      if (entry.second.tag_color != shape_match) continue;
+    } else if (tag_text.empty() || tag_text.find(target_text) == std::string::npos) {
+      continue;
+    }
 
     // This sanity check that the entity is valid should not be necessary with the switch to the
     // SetNameSpriteState_destructor call but adding it out of paranoia against a stale cache.
     Zeal::GameStructures::Entity *current_ent = Zeal::Game::get_entity_list();
     while (current_ent && current_ent != entry.first) current_ent = current_ent->Next;
-    if (!current_ent || !takes_tag_text(entry.first)) continue;
+    if (!current_ent) continue;
+    if (shape_match != TagArrowColor::Off) {  // Matched on the shape alone, which a player can carry.
+      const bool is_player = entry.first->Type == Zeal::GameEnums::Player;
+      if (!is_player && !takes_tag_text(entry.first)) continue;
+      if (!is_player && entry.first->Type != Zeal::GameEnums::NPC && !entry.second.corpse_tag) continue;
+      matches.push_back(entry.first);
+      continue;
+    }
+    if (!takes_tag_text(entry.first)) continue;
     if (entry.first->Type != Zeal::GameEnums::NPC && !entry.second.corpse_tag) continue;  // A tag from its life.
 
     // There's a substring match but do a secondary exact check also.
@@ -1511,6 +1541,15 @@ bool NamePlate::handle_tag_target(const std::string &target_text) {
   if (candidates.size() > 1) std::sort(candidates.begin(), candidates.end(), distance_comparison);
   Zeal::Game::set_target(candidates[0]);  // Return closest after sorting by distance.
   return true;
+}
+
+// The /target hook: "/target foo" goes to the visible entity tagged "foo" (or "/target ^MA^" to the one wearing
+// that shape). Returns false, having changed nothing, when no tag matches so the game's own /target runs.
+bool NamePlate::handle_target_command(const std::vector<std::string> &args) {
+  if (args.size() < 2 || !setting_tag_enable.get()) return false;
+  std::string target_text = args[1];
+  for (size_t i = 2; i < args.size(); ++i) target_text += " " + args[i];
+  return handle_tag_target(target_text);
 }
 
 void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
@@ -1704,12 +1743,13 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   Zeal::Game::print_chat("Usage: /tag <on | off | clear>");
   Zeal::Game::print_chat("Usage: /tag <tooltip | filter | suppress | prettyprint | persist> <on | off>");
   Zeal::Game::print_chat("Usage: /tag guildmarks <off | tagged | auto> (hide all, tagged only, or tagged + automatic)");
-  Zeal::Game::print_chat("Usage: /tag target <text_to_match>");
+  Zeal::Game::print_chat(
+      "Usage: /tag target <text_to_match | ^shape^> (also what /target does first; ^MA^ finds the main assist)");
   Zeal::Game::print_chat("Usage: /tag <gsay | rsay | rsgs | chat | local> <message | clear | channel>");
   Zeal::Game::print_chat("Usage: <message> prefixes: '+' to append, '^R^' or '*R:' for color arrow (R, O, Y, G, B, W)");
   Zeal::Game::print_chat(
       "Usage: shapes in place of the color: P paw, S stop, K skull, X x, A sword, D diamond, F flame, T star, "
-      "WP wolf, M moon, U lasso, N lute, H shield, $ dollar, E euro");
+      "WP wolf, M moon, U lasso, N lute, H shield, $ dollar, E euro, MA main assist (target ring, one at a time)");
   Zeal::Game::print_chat("Usage: numbered badges in place of the color: 1 to 12 (like '^7^' or '^12^')");
   Zeal::Game::print_chat("Usage: a paw with a letter or digit on it: P then the character (like '^PK^')");
   Zeal::Game::print_chat(
@@ -1731,10 +1771,11 @@ static int ReadGuildKey(const std::string &key, char kind) {
 }
 
 // Returns the key of a "^key^" prefix (text starts with '^'): two digits for "^10^" to "^12^", 'P' plus
-// a letter or digit for a paw with that character ("^PK^"), "WP" for the wolf ("^WP^"), 'B' or 'I' plus
-// a guild code for that guild's banner or icon ("^BEUR^", "^IEUR^"), 'I' plus the code of a picture in the
-// tagicons folder, else the single character after the '^'. Older clients read only the first character,
-// so "^PK^" shows them a plain paw, "^WP^" a white arrow and "^BEUR^" a blue one.
+// a letter or digit for a paw with that character ("^PK^"), "WP" for the wolf ("^WP^"), "MA" for the main
+// assist's target ring ("^MA^"), 'B' or 'I' plus a guild code for that guild's banner or icon ("^BEUR^",
+// "^IEUR^"), 'I' plus the code of a picture in the tagicons folder, else the single character after the
+// '^'. Older clients read only the first character,
+// so "^PK^" shows them a plain paw, "^WP^" a white arrow, "^MA^" the moon and "^BEUR^" a blue one.
 static std::string ReadTagKey(const std::string &text) {
   bool two_digits = text.size() > 3 && std::isdigit(static_cast<unsigned char>(text[1])) &&
                     std::isdigit(static_cast<unsigned char>(text[2])) && text[3] == '^';
@@ -1742,13 +1783,15 @@ static std::string ReadTagKey(const std::string &text) {
       text.size() > 3 && (text[1] == 'p' || text[1] == 'P') && TagShapes::GlyphIndex(text[2]) >= 0 && text[3] == '^';
   bool wolf =
       text.size() > 3 && (text[1] == 'w' || text[1] == 'W') && (text[2] == 'p' || text[2] == 'P') && text[3] == '^';
+  bool main_assist =
+      text.size() > 3 && (text[1] == 'm' || text[1] == 'M') && (text[2] == 'a' || text[2] == 'A') && text[3] == '^';
   // A guild or picture key runs to the next '^' and must name one, so "^Blue^" stays a blue arrow.
   const size_t end = text.find('^', 1);
   if (end != std::string::npos) {
     const std::string key = text.substr(1, end - 1);
     if (ReadGuildKey(key, 'b') >= 0 || ReadGuildKey(key, 'i') >= 0 || GetTagImage(key)) return key;
   }
-  return text.substr(1, (two_digits || paw_glyph || wolf) ? 2 : 1);
+  return text.substr(1, (two_digits || paw_glyph || wolf || main_assist) ? 2 : 1);
 }
 
 // Returns a RGB color based on the key (else TagArrowColor::Off if no match).
@@ -1765,6 +1808,8 @@ static D3DCOLOR GetTagArrowColor(const std::string &key) {
   }
   if (key.size() == 2 && (key[0] == 'w' || key[0] == 'W') && (key[1] == 'p' || key[1] == 'P'))
     return TagArrowColor::Wolf;
+  if (key.size() == 2 && (key[0] == 'm' || key[0] == 'M') && (key[1] == 'a' || key[1] == 'A'))
+    return TagArrowColor::MainAssist;
   if (int guild = ReadGuildKey(key, 'b'); guild >= 0) return GetGuildBannerColor(guild);
   if (int guild = ReadGuildKey(key, 'i'); guild >= 0) {
     const char *icon_key = TagShapes::kGuilds[guild].icon_key;
@@ -1866,6 +1911,25 @@ const NamePlate::GuildMark *NamePlate::get_auto_guild_mark(const Zeal::GameStruc
   return it->second.color == TagArrowColor::Off ? nullptr : &it->second;
 }
 
+// There is one main assist: a new ^MA^ takes the shape off whoever wore it, in view or saved (a saved player
+// tag would otherwise come back on them when they next zone in).
+void NamePlate::drop_other_main_assists(const Zeal::GameStructures::Entity *keep) {
+  for (auto &entry : nameplate_info_map) {
+    if (entry.first == keep || entry.second.tag_color != TagArrowColor::MainAssist) continue;
+    entry.second.tag_color = TagArrowColor::Off;
+    entry.second.guild_mark = false;
+    entry.second.tag_image.clear();
+    entry.second.tag_image_file.clear();
+  }
+  const std::string keep_name = (keep && keep->Type == Zeal::GameEnums::Player) ? get_player_name(keep) : "";
+  const size_t saved_before = saved_player_tags.size() + saved_tags.size();
+  std::erase_if(saved_player_tags, [&](const auto &entry) {
+    return entry.first != keep_name && entry.second.tag_color == TagArrowColor::MainAssist;
+  });
+  std::erase_if(saved_tags, [&](const auto &entry) { return entry.second.tag_color == TagArrowColor::MainAssist; });
+  if (saved_player_tags.size() + saved_tags.size() != saved_before) saved_tags_dirty = true;
+}
+
 // Parses "raw" (w/out any channel prefix like "Bob tells the raid, '") tag message to
 // confirm it is in a valid format and if apply is true updates the nameplate info map.
 bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_missing_spawn) {
@@ -1945,6 +2009,7 @@ bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_m
     if (image && it->second.tag_color == TagArrowColor::Off)
       it->second.tag_color = TagArrowColor::White;  // No built-in shape: a white arrow if the picture won't load.
     it->second.guild_mark = ReadGuildKey(key, 'b') >= 0 || ReadGuildKey(key, 'i') >= 0;
+    if (it->second.tag_color == TagArrowColor::MainAssist) drop_other_main_assists(entity);
     tag_text = tag_text.substr(1 + key.size());
   } else if (it->second.tag_color == TagArrowColor::Off || it->second.tag_color == TagArrowColor::Nameplate) {
     bool disable_arrow = !setting_tag_default_arrow.get() || !takes_tag_text(entity) ||
