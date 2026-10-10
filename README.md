@@ -733,6 +733,9 @@ Manual editing of the ini file is required to copy from old section to the new s
   - A player's tag is kept by name instead, since a player gets a new spawn id each time they zone in: it
     comes back when they return after zoning, camping or dying, and follows them into other zones with you.
     It is dropped when cleared, on a `clear`, or 3 hours after they were last seen
+  - If the file cannot be written (a read-only EverQuest folder, for example) Zeal prints one chat line,
+    "could not save tags", and retries every 45 seconds or so. An oversized `_tags.txt` (over 1 MB) is ignored
+    and replaced at the next save. `/tag persist off` stops all writes, including the one a `clear` would make
   - Tags broadcast while you were offline are not recovered
 - A received tag only applies if the target name in it matches the mob with that spawn id, so tags sent from
   another zone (rsay or a chat channel) no longer land on an unrelated mob that shares the spawn id

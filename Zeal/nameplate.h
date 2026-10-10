@@ -1,6 +1,7 @@
 #pragma once
 #include <Windows.h>
 
+#include <filesystem>
 #include <functional>
 #include <map>
 #include <string>
@@ -36,9 +37,13 @@ class NamePlate {
 
   std::map<std::pair<int, int>, SavedTag> saved_tags;  // Keyed by {zone id, spawn id}.
   std::map<std::string, SavedTag> saved_player_tags;   // Keyed by stripped player name, in any zone.
-  std::string saved_tags_filename;                     // The character file saved_tags was last loaded from.
+  std::filesystem::path saved_tags_filename;           // The character file saved_tags was last loaded from.
   bool saved_tags_dirty = false;
+  bool saved_tags_failed = false;        // An exception ended persistence for this session.
+  bool saved_tags_write_warned = false;  // The failed-write chat line has been shown.
   ULONGLONG saved_tags_next_sync = 0;
+  ULONGLONG saved_tags_next_write = 0;  // Backoff after a failed write.
+  bool initialized = false;             // Set at the end of the constructor; clean_ui() does nothing before that.
 
  public:
   // The positive color indices must be kept in sync with the color options.
@@ -190,8 +195,9 @@ class NamePlate {
 
   // Tag persistence (state is declared at the top of the class).
   void sync_saved_tags();
+  void sync_saved_tags_impl();
   void clear_saved_tags_in_zone();
-  void load_saved_tags(const std::string &filename);
+  void load_saved_tags(const std::filesystem::path &filename);
   void write_saved_tags();
 
   void clean_ui();
