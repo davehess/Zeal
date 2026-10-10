@@ -474,9 +474,10 @@ std::vector<Part> NumberParts(int number) {
   return parts;
 }
 
-// 5x7 block font for the letters and digits drawn on the pet paw (a charmer's initial). Each row is five
-// bits, most significant on the left, top row first.
-constexpr uint8_t kGlyphRows[36][7] = {
+// 5x7 block font for the letters and digits drawn on the pet paw (a charmer's initial), and the guild banners
+// (index 36 is an ampersand, which GlyphIndex does not return). Each row is five bits, most significant on
+// the left, top row first.
+constexpr uint8_t kGlyphRows[37][7] = {
     {14, 17, 19, 21, 25, 17, 14}, {4, 12, 4, 4, 4, 4, 14},      {14, 17, 1, 2, 4, 8, 31},      // 0 1 2
     {31, 2, 4, 2, 1, 17, 14},     {2, 6, 10, 18, 31, 2, 2},     {31, 16, 30, 1, 1, 17, 14},    // 3 4 5
     {6, 8, 16, 30, 17, 17, 14},   {31, 1, 2, 4, 8, 8, 8},       {14, 17, 17, 14, 17, 17, 14},  // 6 7 8
@@ -488,7 +489,8 @@ constexpr uint8_t kGlyphRows[36][7] = {
     {14, 17, 17, 17, 17, 17, 14}, {30, 17, 17, 30, 16, 16, 16}, {14, 17, 17, 17, 21, 18, 13},  // O P Q
     {30, 17, 17, 30, 20, 18, 17}, {15, 16, 16, 14, 1, 1, 30},   {31, 4, 4, 4, 4, 4, 4},        // R S T
     {17, 17, 17, 17, 17, 17, 14}, {17, 17, 17, 17, 17, 10, 4},  {17, 17, 17, 21, 21, 21, 10},  // U V W
-    {17, 17, 10, 4, 10, 17, 17},  {17, 17, 17, 10, 4, 4, 4},    {31, 1, 2, 4, 8, 16, 31}};     // X Y Z
+    {17, 17, 10, 4, 10, 17, 17},  {17, 17, 17, 10, 4, 4, 4},    {31, 1, 2, 4, 8, 16, 31},      // X Y Z
+    {12, 18, 20, 8, 21, 18, 13}};                                                              // & (banner names only)
 
 // A 5x7 glyph with its top left corner at (x0, z_top), `cell` per font cell, standing `proud` out of each
 // face. Runs of lit cells become rectangles, and a run repeated on the rows below grows into one taller
@@ -691,9 +693,173 @@ void Settle(std::vector<Part> &parts) {
   }
 }
 
+// What a banner carries: the guild's code in letters, its logo (the same drawing as its ^I<code>^ icon), or
+// the logo with the guild's name under it. Flip this one constant to change every banner.
+enum class BannerStyle { Code, Logo, LogoName };
+constexpr BannerStyle kBannerStyle = BannerStyle::Logo;
+
+std::vector<Part> GuildIconParts(int index);  // Defined with the guild icons below.
+
+// The banner's field, where its mark goes (above the swallowtail notch).
+constexpr float kFieldHalfWidth = 0.74f, kFieldBottom = 0.85f, kFieldTop = 2.52f;
+// Name text: the largest cell it is drawn at (the code's own size), the smallest that is still readable, and
+// the width it must fit. The smallest is about 42% of the code letters' height (0.04 against 0.095 a cell).
+constexpr float kNameMaxCell = 0.095f, kNameMinCell = 0.04f, kNameWidth = 2 * kFieldHalfWidth;
+
+// Width in font cells of a line of text: a letter is 5 cells plus a 1 cell gap, a space is 4, no trailing gap.
+float TextCells(const std::string &text) {
+  float cells = -1;
+  for (char c : text) cells += (c == ' ') ? 4.0f : 6.0f;
+  return cells;
+}
+
+int TextGlyph(char c) { return (c == '&') ? 36 : GlyphIndex(c); }
+
+// Draws a line of text with its top left corner at (x0, z_top), in the Logo tone, mirrored on the back face.
+void AppendText(std::vector<Part> &parts, const std::string &text, float x0, float z_top, float cell) {
+  float x = x0;
+  for (char c : text) {
+    if (const int glyph = TextGlyph(c); glyph >= 0)
+      Append(parts, GlyphRects(glyph, x, z_top, cell, Tone::Logo, 2 * kProud));
+    x += ((c == ' ') ? 4.0f : 6.0f) * cell;
+  }
+}
+
+// Fits a guild's name to the banner: one line if it can be that large, else two lines split at a word boundary
+// (balanced), else without a leading "The", else not at all. Returns false when the name cannot be fitted.
+bool FitName(std::vector<std::string> words, std::vector<std::string> &lines, float &cell) {
+  for (int attempt = 0; attempt < 2 && !words.empty(); ++attempt) {
+    const auto join = [&](size_t from, size_t to) {
+      std::string line;
+      for (size_t i = from; i < to; ++i) line += (line.empty() ? "" : " ") + words[i];
+      return line;
+    };
+    const float single = TextCells(join(0, words.size()));
+    if (single * kNameMinCell <= kNameWidth) {
+      lines = {join(0, words.size())};
+      cell = std::min(kNameMaxCell, kNameWidth / single);
+      return true;
+    }
+    size_t best_split = 0;  // The split that leaves the widest line narrowest.
+    float widest = 1e9f;
+    for (size_t split = 1; split < words.size(); ++split) {
+      const float w = std::max(TextCells(join(0, split)), TextCells(join(split, words.size())));
+      if (w < widest) {
+        best_split = split;
+        widest = w;
+      }
+    }
+    if (best_split && widest * kNameMinCell <= kNameWidth) {
+      lines = {join(0, best_split), join(best_split, words.size())};
+      cell = std::min(kNameMaxCell, kNameWidth / widest);
+      return true;
+    }
+    if (words.size() < 2 || words.front() != "The") return false;
+    words.erase(words.begin());
+  }
+  return false;
+}
+
+// A guild's logo: its icon's drawing, or for a guild whose icon is an existing shape that shape's drawing.
+std::vector<Part> LogoParts(int index) {
+  auto parts = GuildIconParts(index);
+  if (parts.empty() && kGuilds[index].icon_key) {
+    const std::string key = kGuilds[index].icon_key;
+    parts = (key == "WP") ? WolfParts() : (key == "E") ? EuroParts() : (key == "$") ? DollarParts() : parts;
+  }
+  return parts;
+}
+
+// Scales parts (keeping their shape) to fit the box and centres them in it, and stands them proud of the flag.
+void FitParts(std::vector<Part> &parts, float x0, float z0, float x1, float z1) {
+  float min_x = 1e9f, max_x = -1e9f, min_z = 1e9f, max_z = -1e9f;
+  for (const auto &part : parts)
+    for (const auto &point : part.outline) {
+      min_x = std::min(min_x, point.x);
+      max_x = std::max(max_x, point.x);
+      min_z = std::min(min_z, point.z);
+      max_z = std::max(max_z, point.z);
+    }
+  const float scale = std::min((x1 - x0) / (max_x - min_x), (z1 - z0) / (max_z - min_z));
+  const Point from = {(min_x + max_x) / 2, (min_z + max_z) / 2}, to = {(x0 + x1) / 2, (z0 + z1) / 2};
+  const auto map = [&](Point p) { return Point{to.x + (p.x - from.x) * scale, to.z + (p.z - from.z) * scale}; };
+  constexpr float kLift = 0.05f;  // The field stands 0.03 out of the flag; the logo has to clear it.
+  for (auto &part : parts) {
+    for (auto &point : part.outline) point = map(point);
+    part.center = map(part.center);
+    part.y_front += (part.y_front < 0) ? -kLift : kLift;
+    part.y_back += (part.y_back < 0) ? -kLift : kLift;
+    switch (part.tone) {  // The icon's own accents become the logo's accents.
+      case Tone::Base:
+        part.tone = Tone::Logo;
+        break;
+      case Tone::Dark:
+        part.tone = Tone::LogoDark;
+        break;
+      case Tone::Light:
+        part.tone = Tone::LogoLight;
+        break;
+      case Tone::Shade:
+        part.tone = Tone::LogoShade;
+        break;
+      default:  // Eye keeps its glow.
+        break;
+    }
+  }
+}
+
+// The mark on a guild's banner. Appends parts a step above the field.
+void AppendBannerMark(std::vector<Part> &parts, int index) {
+  const std::string code = kGuilds[index].code;
+  if (kBannerStyle == BannerStyle::Code) {
+    const float count = static_cast<float>(code.size());
+    const float cell = (code.size() > 2) ? 0.095f : 0.125f;
+    float x = -(count * 5 + count - 1) * cell / 2;
+    for (char c : code) {  // Letters a step above the field, or they would sit level with it.
+      Append(parts, GlyphRects(GlyphIndex(c), x, 1.75f + 3.5f * cell, cell, Tone::Contrast, 2 * kProud));
+      x += 6 * cell;
+    }
+    return;
+  }
+  auto logo = LogoParts(index);
+  if (logo.empty()) {  // A guild with no drawing of its own (a picture takes its place): the code, as before.
+    const float cell = 0.095f;
+    AppendText(parts, code, -TextCells(code) * cell / 2, 1.75f + 3.5f * cell, cell);
+    return;
+  }
+  float text_top = kFieldBottom;  // Where the logo's box starts: above any name.
+  std::vector<std::string> lines;
+  float cell = 0;
+  if (kBannerStyle == BannerStyle::LogoName) {
+    std::vector<std::string> words;
+    std::string word;
+    for (char c : std::string(kGuilds[index].name) + " ") {
+      if (c == ' ') {
+        if (!word.empty()) words.push_back(word);
+        word.clear();
+      } else if (c != '\'') {
+        word += c;
+      }
+    }
+    if (!FitName(words, lines, cell)) {  // Too long to read at the smallest size: the code under the logo.
+      lines = {code};
+      cell = 0.09f;
+    }
+    const float height = static_cast<float>(lines.size()) * 7 * cell + static_cast<float>(lines.size() - 1) * 2 * cell;
+    float z_top = kFieldBottom + height;
+    for (const auto &line : lines) {
+      AppendText(parts, line, -TextCells(line) * cell / 2, z_top, cell);
+      z_top -= 9 * cell;
+    }
+    text_top = kFieldBottom + height + 0.14f;
+  }
+  FitParts(logo, -kFieldHalfWidth, text_top, kFieldHalfWidth, kFieldTop);
+  Append(parts, std::move(logo));
+}
+
 std::vector<Part> BannerParts(int index) {
-  // A swallowtail flag in the guild's color (shaded border, raised field) hanging from a rod, with the
-  // guild's code in block letters on each face. Both outlines are star-shaped about (0, 1.5), above the notch.
+  // A swallowtail flag in the guild's color (shaded border, raised field) hanging from a rod, with the guild's
+  // logo (or code) on each face. Both outlines are star-shaped about (0, 1.5), above the notch.
   const std::vector<Point> flag = {{-0.95f, 0}, {0, 0.55f}, {0.95f, 0}, {0.95f, 2.75f}, {-0.95f, 2.75f}};
   const std::vector<Point> field = {{-0.83f, 0.2f}, {0, 0.7f}, {0.83f, 0.2f}, {0.83f, 2.63f}, {-0.83f, 2.63f}};
   std::vector<Part> parts;
@@ -702,14 +868,7 @@ std::vector<Part> BannerParts(int index) {
   parts.push_back(Flat(Rect(-1.15f, 2.75f, 1.15f, 2.9f), Tone::Dark, 0));  // The rod and its finials.
   for (float x : {-1.2f, 1.2f})
     parts.push_back(Raised(Ellipse({x, 2.825f}, 0.1f, 0.1f, 12), {x, 2.825f}, Tone::Dark, 1));
-  const std::string code = kGuilds[index].code;
-  const float count = static_cast<float>(code.size());
-  const float cell = (code.size() > 2) ? 0.095f : 0.125f;
-  float x = -(count * 5 + count - 1) * cell / 2;
-  for (char c : code) {  // Letters a step above the field, or they would sit level with it.
-    Append(parts, GlyphRects(GlyphIndex(c), x, 1.75f + 3.5f * cell, cell, Tone::Contrast, 2 * kProud));
-    x += 6 * cell;
-  }
+  AppendBannerMark(parts, index);
   return parts;
 }
 
@@ -1133,6 +1292,44 @@ int GuildIndexByName(const std::string &name) {
   for (int i = 0; i < kGuildCount; ++i)
     if (AlnumLower(kGuilds[i].name) == wanted) return i;
   return -1;
+}
+
+float RelativeLuminance(uint32_t rgb) {
+  const auto linear = [](uint32_t channel) {
+    const float c = static_cast<float>(channel) / 255;
+    return (c <= 0.03928f) ? c / 12.92f : powf((c + 0.055f) / 1.055f, 2.4f);
+  };
+  return 0.2126f * linear((rgb >> 16) & 0xFF) + 0.7152f * linear((rgb >> 8) & 0xFF) + 0.0722f * linear(rgb & 0xFF);
+}
+
+float ContrastRatio(uint32_t a, uint32_t b) {
+  const float la = RelativeLuminance(a), lb = RelativeLuminance(b);
+  return (std::max(la, lb) + 0.05f) / (std::min(la, lb) + 0.05f);
+}
+
+uint32_t ContrastingLogoRgb(uint32_t banner_rgb, uint32_t logo_rgb) {
+  constexpr float kMinContrast = 3.0f;
+  if (ContrastRatio(banner_rgb, logo_rgb) >= kMinContrast) return logo_rgb;
+  const auto mix = [&](int target) {  // 85% of the way from the logo's color to white (255) or black (0).
+    uint32_t out = 0;
+    for (int shift : {16, 8, 0}) {
+      const int channel = static_cast<int>((logo_rgb >> shift) & 0xFF);
+      out |= static_cast<uint32_t>(channel + (target - channel) * 85 / 100) << shift;
+    }
+    return out;
+  };
+  const uint32_t light = mix(255), dark = mix(0);
+  return (ContrastRatio(banner_rgb, light) >= ContrastRatio(banner_rgb, dark)) ? light : dark;
+}
+
+uint32_t BannerLogoRgb(int guild) {
+  const Guild &g = kGuilds[guild];
+  uint32_t logo = g.icon_rgb;
+  if (g.icon_key) {  // An existing shape's drawing, in its own tag color (TagArrowColor in nameplate.cpp).
+    const std::string key = g.icon_key;
+    logo = (key == "WP") ? 0xe8e2d4 : (key == "E") ? 0xe8a020 : (key == "$") ? 0x3ab05a : 0xffffff;
+  }
+  return ContrastingLogoRgb(g.banner_rgb, logo);
 }
 
 int GlyphIndex(char c) {

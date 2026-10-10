@@ -755,12 +755,43 @@ TagArrows::RenderInfo TagArrows::AllocateIconShape(const Arrow &tag) {
   Gradient shade_gradient(shade, 150, min_z, max_z);
   Gradient shade_gradient2(shade, 50, min_z, max_z, 0.0f, 0.7f);
 
+  // A guild banner's logo parts take the logo color (contrast-checked against the flag by TagShapes::
+  // BannerLogoRgb), shaded toward white on a light logo and toward black on a dark one so they keep their
+  // contrast with the flag all the way down it.
+  const int banner = index - static_cast<int>(TagShapes::Kind::Banner0);
+  const bool is_banner = banner >= 0 && banner < TagShapes::kGuildCount;
+  const D3DCOLOR logo = is_banner ? (0xff000000u | TagShapes::BannerLogoRgb(banner)) : tag.color;
+  const int logo_luminance = static_cast<int>(
+      (((logo >> 16) & 0xFF) * 299 + ((logo >> 8) & 0xFF) * 587 + (logo & 0xFF) * 114) / 1000);
+  const int logo_grey = (logo_luminance > 140) ? 255 : 0, logo_grey_back = (logo_luminance > 140) ? 200 : 0;
+  const D3DCOLOR logo_light = LightenColor(logo);
+  // Shaded parts are darker than a light logo, but lighter than a dark one (which would swallow them).
+  const auto shaded = [&](int c) { return (logo_luminance > 140) ? c * 7 / 10 : c + (255 - c) * 3 / 10; };
+  const D3DCOLOR logo_shade =
+      D3DCOLOR_XRGB(shaded((logo >> 16) & 0xFF), shaded((logo >> 8) & 0xFF), shaded(logo & 0xFF));
+  const D3DCOLOR logo_dark =
+      D3DCOLOR_XRGB(((logo >> 16) & 0xFF) / 6, ((logo >> 8) & 0xFF) / 6, (logo & 0xFF) / 6);
+  Gradient logo_gradient(logo, logo_grey, min_z, max_z);
+  Gradient logo_gradient2(logo, logo_grey_back, min_z, max_z, 0.0f, 0.7f);
+  Gradient logo_light_gradient(logo_light, logo_grey, min_z, max_z);
+  Gradient logo_light_gradient2(logo_light, logo_grey_back, min_z, max_z, 0.0f, 0.7f);
+  Gradient logo_shade_gradient(logo_shade, logo_grey, min_z, max_z);
+  Gradient logo_shade_gradient2(logo_shade, logo_grey_back, min_z, max_z, 0.0f, 0.7f);
+
   std::vector<ArrowVertex> vertices;
   vertices.reserve(icon.mesh.vertices.size());
   for (const auto &vertex : icon.mesh.vertices) {
     const auto tone = (vertex.tone == TagShapes::Tone::Contrast) ? contrast : vertex.tone;
     D3DCOLOR color = dark;
-    if (tone == TagShapes::Tone::Base)
+    if (tone == TagShapes::Tone::Logo)
+      color = vertex.y < 0 ? logo_gradient.GetColor(vertex.z) : logo_gradient2.GetColor(vertex.z);
+    else if (tone == TagShapes::Tone::LogoLight)
+      color = vertex.y < 0 ? logo_light_gradient.GetColor(vertex.z) : logo_light_gradient2.GetColor(vertex.z);
+    else if (tone == TagShapes::Tone::LogoShade)
+      color = vertex.y < 0 ? logo_shade_gradient.GetColor(vertex.z) : logo_shade_gradient2.GetColor(vertex.z);
+    else if (tone == TagShapes::Tone::LogoDark)
+      color = logo_dark;
+    else if (tone == TagShapes::Tone::Base)
       color = vertex.y < 0 ? gradient.GetColor(vertex.z) : gradient2.GetColor(vertex.z);
     else if (tone == TagShapes::Tone::Light)
       color = vertex.y < 0 ? light_gradient.GetColor(vertex.z) : light_gradient2.GetColor(vertex.z);

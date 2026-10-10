@@ -22,6 +22,10 @@ Summarizes notable changes to Zeal
 
 * Added a slow tag shape `^SLOW^`: an hourglass
 
+* Guild banners (`^B<code>^`) now carry the guild's logo (the same drawing as its `^I<code>^` icon) instead of its
+  three letters. The logo takes the guild's icon color when that stands out from the flag, else a near-white or
+  near-black version of it. The Burnouts icon is now a lit rolled cigarette instead of a burning match
+
 
 ## [1.4.8] - 2026/10/01
 
