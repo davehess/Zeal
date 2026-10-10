@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -368,6 +369,12 @@ static int __fastcall SetNameSpriteTint_UpdateState(void *this_display, void *no
   return SetNameSpriteTint(this_display, not_used, entity);
 }
 
+// A player's name needs no strip_name (no digits or apostrophes), and strip_name returns a pointer into the
+// client's shared buffer, which is not safe to use from inside the entity destructor.
+static std::string get_player_name(const Zeal::GameStructures::Entity *entity) {
+  return std::string(entity->Name, strnlen(entity->Name, sizeof(entity->Name)));
+}
+
 // Flushes any deleted entities in the info_map cache.
 void NamePlate::handle_entity_destructor(Zeal::GameStructures::Entity *entity) {
   auto it = nameplate_info_map.find(entity);
@@ -376,7 +383,7 @@ void NamePlate::handle_entity_destructor(Zeal::GameStructures::Entity *entity) {
   // A tagged player who leaves (zoning, camping, dying) comes back as a new entity: let the next sync
   // restore their tag rather than read the untagged newcomer as a clear.
   if (entity && entity->Type == Zeal::GameEnums::Player && !saved_player_tags.empty()) {
-    auto saved = saved_player_tags.find(Zeal::Game::strip_name(entity->Name));
+    auto saved = saved_player_tags.find(get_player_name(entity));
     if (saved != saved_player_tags.end()) saved->second.live_seen = false;
   }
 }
@@ -555,6 +562,7 @@ NamePlate::NamePlate(ZealService *zeal) {
   zeal->callbacks->AddGeneric([this]() { render_ui(); }, callback_type::RenderUI);
   zeal->callbacks->AddGeneric([this]() { check_raid_shownames(); }, callback_type::MainLoop);
   zeal->callbacks->AddGeneric([this]() { sync_saved_tags(); }, callback_type::MainLoop);
+  initialized = true;
 }
 
 NamePlate::~NamePlate() {}
@@ -656,6 +664,7 @@ void NamePlate::load_sprite_font() {
 }
 
 void NamePlate::clean_ui() {
+  if (!initialized) return;  // Called by setting change callbacks while the members are still being constructed.
   nameplate_info_map.clear();
   for (auto &entry : saved_tags) entry.second.live_seen = false;  // Restored as the entities reappear.
   for (auto &entry : saved_player_tags) entry.second.live_seen = false;
@@ -1182,13 +1191,26 @@ void NamePlate::clear_tags() {
 }
 
 static constexpr long long kSavedTagMaxAgeSeconds = 3 * 60 * 60;  // Long enough for a raid, short of a repop.
-static constexpr long long kSavedTagRefreshSeconds = 10 * 60;     // How often a live tag's last_seen is rewritten.
+static constexpr long long kSavedTagRefreshSeconds = 10 * 60;     // How often live tags' last_seen is rewritten.
 static constexpr ULONGLONG kSavedTagSyncIntervalMs = 1000;
+static constexpr ULONGLONG kSavedTagRetryMs = 45 * 1000;              // Wait after a failed write before retrying.
+static constexpr std::uintmax_t kSavedTagMaxFileBytes = 1024 * 1024;  // A bigger file is not ours: skip it.
 
-// Runs about once a second: mirrors live tags into saved_tags, restores saved tags onto entities that
-// have reappeared (after zoning, a character switch, a device reset or a crash), and writes the
-// character's tag file when anything changed.
+// Runs about once a second from the game's main loop, where an exception would crash the game, so a failure
+// (a path or file the code cannot handle, out of memory) turns persistence off for the session instead.
 void NamePlate::sync_saved_tags() {
+  if (saved_tags_failed) return;
+  try {
+    sync_saved_tags_impl();
+  } catch (const std::exception &) {
+    saved_tags_failed = true;
+    Zeal::Game::print_chat("Zeal: tag persistence failed - tags won't persist until you restart");
+  }
+}
+
+// Mirrors live tags into saved_tags, restores saved tags onto entities that have reappeared (after zoning,
+// a character switch, a device reset or a crash), and writes the character's tag file when anything changed.
+void NamePlate::sync_saved_tags_impl() {
   if (!setting_tag_enable.get() || !setting_tag_persist.get() || !Zeal::Game::is_in_game()) return;
   const ULONGLONG now_ms = GetTickCount64();
   if (now_ms < saved_tags_next_sync) return;
@@ -1199,7 +1221,8 @@ void NamePlate::sync_saved_tags() {
   if (!self || !char_info) return;
 
   // Load the character's file at login or a character switch, merged with what this session already holds.
-  std::string filename = (Zeal::Game::get_game_path() / (std::string(char_info->Name) + "_tags.txt")).string();
+  // A path throughout, never .string(): that throws on characters the ANSI code page cannot hold.
+  const std::filesystem::path filename = Zeal::Game::get_game_path() / (std::string(char_info->Name) + "_tags.txt");
   if (filename != saved_tags_filename) {
     load_saved_tags(filename);
     saved_tags_filename = filename;
@@ -1207,6 +1230,10 @@ void NamePlate::sync_saved_tags() {
 
   const long long now = time(nullptr);
   const int zone_id = self->ZoneId;
+
+  // Unchanged live tags are refreshed together, in one write, once any of them is due.
+  std::vector<SavedTag *> live_tags;  // Erasing a saved tag below also removes it from here.
+  bool refresh_due = false;
 
   // One live entity against its saved copy: save a new or changed tag (or note it is still live), restore
   // the tag onto an entity that is back untagged, and drop a saved tag that was cleared while in view.
@@ -1229,13 +1256,12 @@ void NamePlate::sync_saved_tags() {
         saved_tags_dirty = true;
       } else {
         saved->second.live_seen = true;
-        if (now - saved->second.last_seen > kSavedTagRefreshSeconds) {
-          saved->second.last_seen = now;
-          saved_tags_dirty = true;
-        }
+        live_tags.push_back(&saved->second);
+        if (now - saved->second.last_seen > kSavedTagRefreshSeconds) refresh_due = true;
       }
     } else if (saved != saved_map.end()) {
       if (saved->second.name != name || saved->second.live_seen) {
+        std::erase(live_tags, &saved->second);
         saved_map.erase(saved);  // Another mob now has the spawn id, or the tag was cleared.
         saved_tags_dirty = true;
       } else {  // Back after zoning, a character switch or a crash: restore it.
@@ -1252,19 +1278,35 @@ void NamePlate::sync_saved_tags() {
     }
   };
 
-  for (auto &[entity, info] : nameplate_info_map) {
-    if (!entity || !entity->SpawnId) continue;
-    const std::string name = Zeal::Game::strip_name(entity->Name);
+  // Walk the game's entity list and look each up in the cache, rather than trusting the cache's keys.
+  for (auto *entity = Zeal::Game::get_entity_list(); entity; entity = entity->Next) {
+    auto it = nameplate_info_map.find(entity);
+    if (it == nameplate_info_map.end() || !entity->SpawnId) continue;
+    NamePlateInfo &info = it->second;
+    if (saved_tags.empty() && saved_player_tags.empty() && info.tag_text.empty() &&
+        info.tag_color == TagArrowColor::Off)
+      continue;  // Nothing tagged here and nothing saved to restore or clear.
+
     if (entity->Type == Zeal::GameEnums::Player) {  // By name, in any zone: the spawn id changes on each zone-in.
+      const std::string name = get_player_name(entity);
       sync_one(saved_player_tags, name, name, entity, info);
       continue;
     }
     const auto key = std::make_pair(zone_id, static_cast<int>(entity->SpawnId));
     if (entity->Type >= Zeal::GameEnums::NPCCorpse) {  // A kill ends the tag.
-      if (saved_tags.erase(key)) saved_tags_dirty = true;
+      if (auto saved = saved_tags.find(key); saved != saved_tags.end()) {
+        std::erase(live_tags, &saved->second);
+        saved_tags.erase(saved);
+        saved_tags_dirty = true;
+      }
       continue;
     }
-    sync_one(saved_tags, key, name, entity, info);
+    sync_one(saved_tags, key, Zeal::Game::strip_name(entity->Name), entity, info);
+  }
+
+  if (refresh_due) {
+    for (auto *tag : live_tags) tag->last_seen = now;
+    saved_tags_dirty = true;
   }
 
   auto too_old = [now](const auto &entry) { return now - entry.second.last_seen > kSavedTagMaxAgeSeconds; };
@@ -1278,6 +1320,7 @@ void NamePlate::clear_saved_tags_in_zone() {
   const int zone_id = self->ZoneId;
   std::erase_if(saved_tags, [zone_id](const auto &entry) { return entry.first.first == zone_id; });
   saved_player_tags.clear();  // Player tags belong to no zone, so a clear takes all of them.
+  saved_tags_dirty = true;    // Written now if persistence is on, else when it is next turned on and syncs.
   write_saved_tags();
 }
 
@@ -1286,8 +1329,12 @@ static constexpr int kSavedPlayerZone = -1;  // The file's zone field for a play
 // File format, one tag per line: zone_id, spawn_id, last_seen (unix time), color (hex, optionally followed by
 // ":1" or ":0" for a guild mark and ":" plus the tag picture key), name, text, tab separated.
 // A player's line has zone kSavedPlayerZone and spawn id 0. Merged into saved_tags and saved_player_tags,
-// keeping the newer of any duplicate.
-void NamePlate::load_saved_tags(const std::string &filename) {
+// keeping the newer of any duplicate. A file over kSavedTagMaxFileBytes is skipped (and overwritten by the
+// next write); that also bounds how much a single line can allocate.
+void NamePlate::load_saved_tags(const std::filesystem::path &filename) {
+  std::error_code error;
+  const auto file_size = std::filesystem::file_size(filename, error);
+  if (error || file_size > kSavedTagMaxFileBytes) return;
   std::ifstream file(filename);
   if (!file) return;
   const long long now = time(nullptr);
@@ -1299,15 +1346,16 @@ void NamePlate::load_saved_tags(const std::string &filename) {
     for (size_t tab; fields.size() < 5 && (tab = line.find('\t', start)) != std::string::npos; start = tab + 1)
       fields.push_back(line.substr(start, tab - start));
     fields.push_back(line.substr(start));  // The text is last and may itself be empty.
-    if (fields.size() != 6 || fields[4].empty()) continue;
+    if (fields.size() != 6 || fields[0].empty() || fields[1].empty() || fields[4].empty()) continue;
 
     char *end = nullptr;
     const int zone_id = static_cast<int>(strtol(fields[0].c_str(), &end, 10));
     if (*end) continue;
     const int spawn_id = static_cast<int>(strtol(fields[1].c_str(), &end, 10));
     if (*end) continue;
-    const long long last_seen = strtoll(fields[2].c_str(), &end, 10);
+    long long last_seen = strtoll(fields[2].c_str(), &end, 10);
     if (*end || now - last_seen > kSavedTagMaxAgeSeconds) continue;
+    last_seen = std::min(last_seen, now);  // A time in the future would never expire.
     const DWORD color = strtoul(fields[3].c_str(), &end, 16);
     bool guild_mark = false;
     std::string tag_image;  // Older files end the color here and have neither.
@@ -1318,6 +1366,8 @@ void NamePlate::load_saved_tags(const std::string &filename) {
     } else if (*end) {
       continue;
     }
+    // A real color has alpha; only the two special values (no arrow, nameplate-colored arrow) do not.
+    if (color != TagArrowColor::Off && color != TagArrowColor::Nameplate && !(color >> 24)) continue;
 
     auto &saved = (zone_id == kSavedPlayerZone) ? saved_player_tags[fields[4]] : saved_tags[{zone_id, spawn_id}];
     if (saved.last_seen >= last_seen) continue;  // This session already has a newer copy.
@@ -1332,32 +1382,60 @@ void NamePlate::load_saved_tags(const std::string &filename) {
 }
 
 // Writes to a temporary file and renames it over the old one, so a crash mid-write cannot leave a partial file.
+// Does nothing when persistence is off. A failure leaves the dirty flag set and is retried after a backoff, with
+// one chat line the first time.
 void NamePlate::write_saved_tags() {
-  saved_tags_dirty = false;
-  if (saved_tags_filename.empty()) return;
-  const std::string temp_filename = saved_tags_filename + ".tmp";
-  {
-    std::ofstream file(temp_filename, std::ios::trunc);
-    if (!file) return;
-    file << "# Zeal nameplate tags (zone, spawn_id, last_seen, color, name, text; zone -1 is a player, by name)\n";
-    // The color, plus ":mark:picture" when the tag has a guild mark or a picture.
-    auto color_field = [](const SavedTag &tag) {
-      char hex[16];
-      snprintf(hex, sizeof(hex), "%x", static_cast<unsigned int>(tag.tag_color));
-      std::string field = hex;
-      if (tag.guild_mark || !tag.tag_image.empty()) field += (tag.guild_mark ? ":1:" : ":0:") + tag.tag_image;
-      return field;
-    };
-    for (const auto &[key, tag] : saved_tags)
-      file << key.first << '\t' << key.second << '\t' << tag.last_seen << '\t' << color_field(tag) << '\t' << tag.name
-           << '\t' << tag.tag_text << '\n';
-    for (const auto &[name, tag] : saved_player_tags)
-      file << kSavedPlayerZone << "\t0\t" << tag.last_seen << '\t' << color_field(tag) << '\t' << name << '\t'
-           << tag.tag_text << '\n';
-    if (!file) return;
+  if (!setting_tag_persist.get() || saved_tags_filename.empty() || saved_tags_failed) return;
+  const ULONGLONG now_ms = GetTickCount64();
+  if (now_ms < saved_tags_next_write) return;
+
+  bool saved = false;
+  try {
+    std::filesystem::path temp_filename = saved_tags_filename;
+    temp_filename += ".tmp";
+    {
+      std::ofstream file(temp_filename, std::ios::trunc);
+      if (file) {
+        file << "# Zeal nameplate tags (zone, spawn_id, last_seen, color, name, text; zone -1 is a player, by name)\n";
+        // The color, plus ":mark:picture" when the tag has a guild mark or a picture.
+        auto color_field = [](const SavedTag &tag) {
+          char hex[16];
+          snprintf(hex, sizeof(hex), "%x", static_cast<unsigned int>(tag.tag_color));
+          std::string field = hex;
+          if (tag.guild_mark || !tag.tag_image.empty()) field += (tag.guild_mark ? ":1:" : ":0:") + tag.tag_image;
+          return field;
+        };
+        for (const auto &[key, tag] : saved_tags)
+          file << key.first << '\t' << key.second << '\t' << tag.last_seen << '\t' << color_field(tag) << '\t'
+               << tag.name << '\t' << tag.tag_text << '\n';
+        for (const auto &[name, tag] : saved_player_tags)
+          file << kSavedPlayerZone << "\t0\t" << tag.last_seen << '\t' << color_field(tag) << '\t' << name << '\t'
+               << tag.tag_text << '\n';
+        file.flush();
+        saved = static_cast<bool>(file);
+      }
+    }
+    std::error_code error;
+    if (saved) std::filesystem::rename(temp_filename, saved_tags_filename, error);
+    saved = saved && !error;
+    if (!saved) std::filesystem::remove(temp_filename, error);
+  } catch (const std::exception &) {
+    saved = false;
   }
-  std::error_code error;
-  std::filesystem::rename(temp_filename, saved_tags_filename, error);
+
+  if (saved) {
+    saved_tags_dirty = false;
+    return;
+  }
+  saved_tags_next_write = now_ms + kSavedTagRetryMs;
+  if (saved_tags_write_warned) return;
+  saved_tags_write_warned = true;
+  std::string name = "its file";
+  try {
+    name = saved_tags_filename.filename().string();
+  } catch (const std::exception &) {
+  }
+  Zeal::Game::print_chat("Zeal: could not save tags to %s - tags won't persist", name.c_str());
 }
 
 static constexpr int kMaxTagTextLength = 32;
