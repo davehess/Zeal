@@ -151,12 +151,11 @@ std::vector<Part> CrossParts() {
   return {{Bar(center, 3.0f, 0.55f, kPi / 4), center}, {Bar(center, 3.0f, 0.55f, -kPi / 4), center}};
 }
 
-std::vector<Part> SwordParts(float guard_width = 1.0f) {
-  // Points down, like the arrow. A narrower guard_width keeps the crossed swords' guards apart.
+std::vector<Part> SwordParts() {
+  // Points down, like the arrow.
   const std::vector<Point> blade = {{0, 0}, {0.24f, 0.4f}, {0.24f, 1.72f}, {-0.24f, 1.72f}, {-0.24f, 0.4f}};
-  const float g = guard_width;
-  const std::vector<Point> guard = {{-0.9f * g, 1.84f}, {-0.78f * g, 1.72f}, {0.78f * g, 1.72f},
-                                    {0.9f * g, 1.84f},  {0.78f * g, 1.96f},  {-0.78f * g, 1.96f}};
+  const std::vector<Point> guard = {{-0.9f, 1.84f}, {-0.78f, 1.72f}, {0.78f, 1.72f},
+                                    {0.9f, 1.84f},  {0.78f, 1.96f},  {-0.78f, 1.96f}};
   std::vector<Part> parts;
   parts.push_back({blade, {0, 1.0f}, Tone::Light});
   parts.push_back(Detail(Rect(-0.05f, 0.45f, 0.05f, 1.6f), {0, 1.0f}, Tone::Dark));  // Fuller.
@@ -298,45 +297,51 @@ std::vector<Part> ShieldParts() {
   return parts;
 }
 
-// A part scaled and turned counter-clockwise by angle about from, then moved so that from lands on to. Turning
-// keeps a part's winding, so its fan or given triangles still face the right way. `lift` thickens it on both faces.
-Part Placed(Part part, Point from, float scale, float angle, Point to, float lift) {
+// A part turned counter-clockwise by angle about the origin. Turning keeps a part's winding, so its fan still
+// faces the right way. `lift` thickens it on both faces.
+Part Turned(Part part, float angle, float lift) {
   const float c = cosf(angle), s = sinf(angle);
-  auto place = [&](Point point) {
-    const float dx = (point.x - from.x) * scale, dz = (point.z - from.z) * scale;
-    return Point{to.x + dx * c - dz * s, to.z + dx * s + dz * c};
-  };
-  for (auto &point : part.outline) point = place(point);
-  part.center = place(part.center);
+  auto turn = [&](Point point) { return Point{point.x * c - point.z * s, point.x * s + point.z * c}; };
+  for (auto &point : part.outline) point = turn(point);
+  part.center = turn(part.center);
   part.y_front -= lift;
   part.y_back += lift;
   return part;
 }
 
 std::vector<Part> CrossedSwordsTargetParts() {
-  // The main assist: two swords crossed in an X, hilts down and blades up, with a target (a ring around a
-  // dot) where the blades cross. Each sword is SwordParts() scaled up, turned point-up and then 45 degrees
-  // either way about its blade, so both pass through the crossing. The second sword is a little thicker so
-  // the two faces do not z-fight where they overlap, and the target stands out of both. The shape is mirror
-  // symmetric, so it reads the same from either side.
-  constexpr float kCrossAt = 1.3f;  // How far up its blade (from the tip) each sword crosses.
-  constexpr float kScale = 1.4f;    // Bigger than the lone sword: crossed at 45 degrees it spans less height.
-  const Point from = {0, kCrossAt};
-  const Point cross = {0, 0};  // Placed here, then the whole shape is lowered so its lowest point is at z = 0.
-  std::vector<Part> parts;
-  int sword = 0;
-  for (float angle : {kPi * 3 / 4, kPi * 5 / 4}) {  // Tip up and to the right, then up and to the left.
-    for (auto &part : SwordParts(0.6f))
-      parts.push_back(Placed(std::move(part), from, kScale, angle, cross, 0.045f * static_cast<float>(sword)));
-    ++sword;
-  }
-  // Level 3 and up stands out of the thicker sword's detail (which reaches level 2).
-  parts.push_back(Raised(Ellipse(cross, 0.46f, 0.46f, 20), cross, Tone::Dark, 3));  // A dark backing, so it reads.
-  for (auto &part : Stroke(Ellipse(cross, 0.32f, 0.32f, 16), 0.1f, Tone::Light, 4, true))
-    parts.push_back(std::move(part));
-  parts.push_back(Raised(Ellipse(cross, 0.12f, 0.12f, 12), cross, Tone::Light, 5));  // The dot.
+  // The main assist: two identical straight swords crossed in an X, blades up and hilts down, with a target (a
+  // ring around a dot, on a dark backing) exactly where their axes cross. Each sword is built upright with its
+  // axis through the origin (pointed tip at the top, then the crossguard, grip and pommel) and turned 45 degrees
+  // either way, so the crossing is the origin and the whole shape is mirror symmetric. The second sword is a
+  // little thicker so the faces do not z-fight where they overlap, and the target stands out of both.
+  constexpr float kBladeHalfWidth = 0.15f;
+  constexpr float kTip = 1.9f, kPoint = 1.6f;  // The tip's height and where the taper ends.
+  constexpr float kGuardZ = -0.6f;             // Where the blade ends and the crossguard sits.
+  constexpr float kPommelZ = -1.7f;            // Puts the pommels as far below the crossing as the tips are above.
+  std::vector<Part> sword;
+  sword.push_back({{{-kBladeHalfWidth, kGuardZ}, {kBladeHalfWidth, kGuardZ}, {kBladeHalfWidth, kPoint}, {0, kTip},
+                    {-kBladeHalfWidth, kPoint}},
+                   {0, 0.5f},
+                   Tone::Light});
+  sword.push_back({Rect(-0.45f, kGuardZ - 0.14f, 0.45f, kGuardZ), {0, kGuardZ - 0.07f}});  // Crossguard.
+  sword.push_back({Rect(-0.07f, kPommelZ, 0.07f, kGuardZ - 0.14f), {0, -1.1f}});            // Grip.
+  sword.push_back({Ellipse({0, kPommelZ}, 0.15f, 0.15f, 14), {0, kPommelZ}});               // Pommel.
 
-  float lowest = 0;
+  std::vector<Part> parts;
+  int index = 0;
+  for (float angle : {-kPi / 4, kPi / 4}) {  // Tip up and to the right, then up and to the left.
+    for (const auto &part : sword) parts.push_back(Turned(part, angle, 0.045f * static_cast<float>(index)));
+    ++index;
+  }
+  // Level 3 and up stands out of the thicker sword (level 1.5).
+  const Point cross = {0, 0};
+  parts.push_back(Raised(Ellipse(cross, 0.58f, 0.58f, 20), cross, Tone::Dark, 3));  // A dark outline and backing.
+  for (auto &part : Stroke(Ellipse(cross, 0.44f, 0.44f, 16), 0.12f, Tone::Light, 4, true))
+    parts.push_back(std::move(part));
+  parts.push_back(Raised(Ellipse(cross, 0.13f, 0.13f, 12), cross, Tone::Light, 5));  // The dot.
+
+  float lowest = 0;  // Sit the lowest point on z = 0 (the shape is already centered across x).
   for (const auto &part : parts)
     for (const auto &point : part.outline) lowest = (point.z < lowest) ? point.z : lowest;
   for (auto &part : parts) {
@@ -345,6 +350,7 @@ std::vector<Part> CrossedSwordsTargetParts() {
   }
   return parts;
 }
+
 std::vector<Part> HourglassParts() {
   // Slow: two glass triangles tip to tip between a top and a bottom plate and two posts, with sand piled in
   // the lower bulb, a thin stream through the neck and a little still in the upper one.
