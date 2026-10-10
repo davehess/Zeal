@@ -2,7 +2,7 @@
 
 # Save your #popflags output with "Export data on /camp"
 
-*Fork branch `popflags-export` (`195433e`), based on Zeal 1.4.8. Status: draft; in the test-all build (`ab95a91`), not yet run in game.*
+*Fork branch `popflags-export` (`9b0186d`), based on Zeal 1.4.8. Status: draft; in the test-all build (`2c5e006`), not yet run in game.*
 
 ![Diagram: /camp sends #popflags all, Zeal keeps the server's reply for 3 seconds and writes <name>-PoPFlags.txt](diagram.png)
 
@@ -24,7 +24,7 @@ We have not seen the real `#popflags` text. The file keeps the reply line for li
 - clang-format with Zeal's style is clean on the new lines.
 - The whole fork is built by GitHub from test-all; nothing has run in game yet. The in-game plan is in [`TEST-CASES.md`](TEST-CASES.md). The main thing to confirm is that the server's reply arrives in the small server colours Zeal keeps.
 
-**Try it:** in the fork's test-all build (https://github.com/davehess/Zeal/releases/tag/test-all-build), `ab95a91` or later, then `/outputfile popflags`.
+**Try it:** in the fork's test-all build (https://github.com/davehess/Zeal/releases/tag/test-all-build), `2c5e006` or later, then `/outputfile popflags`.
 
 **Pull request:** _link added when it is filed._
 
