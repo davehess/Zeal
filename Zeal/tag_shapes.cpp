@@ -694,17 +694,22 @@ void Settle(std::vector<Part> &parts) {
 }
 
 // What a banner carries: the guild's code in letters, its logo (the same drawing as its ^I<code>^ icon), or
-// the logo with the guild's name under it. Flip this one constant to change every banner.
+// the logo with the guild's name around it. Flip this one constant to change every banner.
 enum class BannerStyle { Code, Logo, LogoName };
-constexpr BannerStyle kBannerStyle = BannerStyle::Logo;
+constexpr BannerStyle kBannerStyle = BannerStyle::LogoName;
 
 std::vector<Part> GuildIconParts(int index);  // Defined with the guild icons below.
 
 // The banner's field, where its mark goes (above the swallowtail notch).
 constexpr float kFieldHalfWidth = 0.74f, kFieldBottom = 0.85f, kFieldTop = 2.52f;
-// Name text: the largest cell it is drawn at (the code's own size), the smallest that is still readable, and
-// the width it must fit. The smallest is about 42% of the code letters' height (0.04 against 0.095 a cell).
-constexpr float kNameMaxCell = 0.095f, kNameMinCell = 0.04f, kNameWidth = 2 * kFieldHalfWidth;
+// Name text, in font cells (a cell is one dot of the 5x7 letters). Letters are drawn as large as fits the width,
+// but no larger than the largest (past it a bigger logo is worth more); below the smallest they are no longer
+// read at raid distance (a cell of 0.03 is a letter 0.21 tall, 31% of the code's).
+constexpr float kNameMaxCell = 0.055f, kNameMinCell = 0.03f, kNameWidth = 1.6f;
+constexpr float kLineGap = 0.05f;       // Between two lines of text.
+constexpr float kBlockGap = 0.08f;      // Between text and the logo.
+constexpr float kGoodLogoHeight = 0.6f;  // The logo gets this much room if the letters can stay readable,
+constexpr float kMinLogoHeight = 0.4f;   // and is never squeezed below this.
 
 // Width in font cells of a line of text: a letter is 5 cells plus a 1 cell gap, a space is 4, no trailing gap.
 float TextCells(const std::string &text) {
@@ -715,49 +720,105 @@ float TextCells(const std::string &text) {
 
 int TextGlyph(char c) { return (c == '&') ? 36 : GlyphIndex(c); }
 
-// Draws a line of text with its top left corner at (x0, z_top), in the Logo tone, mirrored on the back face.
+// Draws a line of text with its top left corner at (x0, z_top), in the banner's text color, mirrored on the back.
 void AppendText(std::vector<Part> &parts, const std::string &text, float x0, float z_top, float cell) {
   float x = x0;
   for (char c : text) {
     if (const int glyph = TextGlyph(c); glyph >= 0)
-      Append(parts, GlyphRects(glyph, x, z_top, cell, Tone::Logo, 2 * kProud));
+      Append(parts, GlyphRects(glyph, x, z_top, cell, Tone::LogoText, 2 * kProud));
     x += ((c == ' ') ? 4.0f : 6.0f) * cell;
   }
 }
 
-// Fits a guild's name to the banner: one line if it can be that large, else two lines split at a word boundary
-// (balanced), else without a leading "The", else not at all. Returns false when the name cannot be fitted.
-bool FitName(std::vector<std::string> words, std::vector<std::string> &lines, float &cell) {
-  for (int attempt = 0; attempt < 2 && !words.empty(); ++attempt) {
-    const auto join = [&](size_t from, size_t to) {
-      std::string line;
-      for (size_t i = from; i < to; ++i) line += (line.empty() ? "" : " ") + words[i];
-      return line;
-    };
-    const float single = TextCells(join(0, words.size()));
-    if (single * kNameMinCell <= kNameWidth) {
-      lines = {join(0, words.size())};
-      cell = std::min(kNameMaxCell, kNameWidth / single);
+// Lines of text above and below the logo, all drawn at one cell size.
+struct NameLines {
+  std::vector<std::string> above, below;
+  float cell = 0;
+  float logo_height = 0;
+};
+
+// Fills in the cell and the room left for the logo. The cell is as large as the widest line allows, but small
+// enough to leave the logo kGoodLogoHeight (else, failing that, kMinLogoHeight). False when that cell is below
+// the smallest readable size.
+bool MeasureLines(NameLines &layout) {
+  float widest = 0;
+  const size_t lines = layout.above.size() + layout.below.size();
+  for (const auto *side : {&layout.above, &layout.below})
+    for (const auto &line : *side) widest = std::max(widest, TextCells(line));
+  if (!lines) return false;
+  const float gaps = static_cast<float>((layout.above.size() > 1 ? layout.above.size() - 1 : 0) +
+                                        (layout.below.size() > 1 ? layout.below.size() - 1 : 0));
+  const float blocks = (layout.above.empty() || layout.below.empty()) ? 1.0f : 2.0f;
+  const float room = (kFieldTop - kFieldBottom) - kLineGap * gaps - kBlockGap * blocks;  // For logo and letters.
+  const float fits = std::min(kNameMaxCell, kNameWidth / widest);
+  layout.cell = std::min(fits, (room - kGoodLogoHeight) / (7 * static_cast<float>(lines)));
+  if (layout.cell < kNameMinCell)
+    layout.cell = std::min(fits, (room - kMinLogoHeight) / (7 * static_cast<float>(lines)));
+  if (layout.cell < kNameMinCell) return false;
+  layout.logo_height = room - 7 * layout.cell * static_cast<float>(lines);
+  return true;
+}
+
+// Every way to put the words on one line or two (split at a word boundary).
+std::vector<std::vector<std::string>> LineChoices(const std::vector<std::string> &words, size_t from, size_t to) {
+  const auto join = [&](size_t a, size_t b) {
+    std::string line;
+    for (size_t i = a; i < b; ++i) line += (line.empty() ? "" : " ") + words[i];
+    return line;
+  };
+  if (from == to) return {{}};
+  std::vector<std::vector<std::string>> choices = {{join(from, to)}};
+  for (size_t split = from + 1; split < to; ++split) choices.push_back({join(from, split), join(split, to)});
+  return choices;
+}
+
+// The best layout for a guild's name: the whole name split into lines above and below the logo, preferring the
+// largest smallest-line, then the largest logo. Guilds whose split is chosen by hand are listed here. False when
+// no layout reaches the smallest readable size (the caller then falls back to the code).
+bool ChooseNameLines(const std::string &code, const std::string &name, NameLines &best) {
+  std::vector<std::string> words;
+  std::string word;
+  for (char c : name + " ") {
+    if (c == ' ') {
+      if (!word.empty()) words.push_back(word);
+      word.clear();
+    } else if (c != '\'') {
+      word += c;
+    }
+  }
+  struct Chosen {
+    const char *code;
+    std::vector<std::string> above, below;
+  };
+  static const Chosen kChosen[] = {{"HBM", {"HERE", "THERE"}, {"BE", "MONSTERS"}}};
+  for (const auto &chosen : kChosen)
+    if (code == chosen.code) {
+      NameLines layout;
+      layout.above = chosen.above;
+      layout.below = chosen.below;
+      if (!MeasureLines(layout)) return false;
+      best = layout;
       return true;
     }
-    size_t best_split = 0;  // The split that leaves the widest line narrowest.
-    float widest = 1e9f;
-    for (size_t split = 1; split < words.size(); ++split) {
-      const float w = std::max(TextCells(join(0, split)), TextCells(join(split, words.size())));
-      if (w < widest) {
-        best_split = split;
-        widest = w;
-      }
-    }
-    if (best_split && widest * kNameMinCell <= kNameWidth) {
-      lines = {join(0, best_split), join(best_split, words.size())};
-      cell = std::min(kNameMaxCell, kNameWidth / widest);
-      return true;
-    }
-    if (words.size() < 2 || words.front() != "The") return false;
+  bool found = false;
+  for (int attempt = 0; attempt < 2 && !found && !words.empty(); ++attempt) {  // The second without "The".
+    for (size_t split = 0; split <= words.size(); ++split)
+      for (const auto &above : LineChoices(words, 0, split))
+        for (const auto &below : LineChoices(words, split, words.size())) {
+          NameLines layout;
+          layout.above = above;
+          layout.below = below;
+          if (!MeasureLines(layout)) continue;
+          if (!found || layout.cell > best.cell + 1e-4f ||
+              (layout.cell > best.cell - 1e-4f && layout.logo_height > best.logo_height + 1e-4f)) {
+            best = layout;
+            found = true;
+          }
+        }
+    if (words.size() < 2 || words.front() != "The") break;
     words.erase(words.begin());
   }
-  return false;
+  return found;
 }
 
 // A guild's logo: its icon's drawing, or for a guild whose icon is an existing shape that shape's drawing.
@@ -808,6 +869,35 @@ void FitParts(std::vector<Part> &parts, float x0, float z0, float x1, float z1) 
   }
 }
 
+// A dark rim for a logo that keeps its own light color on a flag it does not contrast with: the whole drawing a
+// little larger, flat, just above the field and below the logo.
+std::vector<Part> OutlineParts(const std::vector<Part> &logo) {
+  float min_x = 1e9f, max_x = -1e9f, min_z = 1e9f, max_z = -1e9f;
+  for (const auto &part : logo)
+    for (const auto &point : part.outline) {
+      min_x = std::min(min_x, point.x);
+      max_x = std::max(max_x, point.x);
+      min_z = std::min(min_z, point.z);
+      max_z = std::max(max_z, point.z);
+    }
+  constexpr float kGrow = 1.06f;
+  const Point middle = {(min_x + max_x) / 2, (min_z + max_z) / 2};
+  const auto grow = [&](Point p) {
+    return Point{middle.x + (p.x - middle.x) * kGrow, middle.z + (p.z - middle.z) * kGrow};
+  };
+  std::vector<Part> rim;
+  for (const auto &part : logo) {
+    Part copy = part;
+    for (auto &point : copy.outline) point = grow(point);
+    copy.center = grow(copy.center);
+    copy.tone = Tone::LogoDark;
+    copy.y_front = -(kHalfThickness + 0.04f);
+    copy.y_back = kHalfThickness + 0.04f;
+    rim.push_back(std::move(copy));
+  }
+  return rim;
+}
+
 // The mark on a guild's banner. Appends parts a step above the field.
 void AppendBannerMark(std::vector<Part> &parts, int index) {
   const std::string code = kGuilds[index].code;
@@ -827,33 +917,31 @@ void AppendBannerMark(std::vector<Part> &parts, int index) {
     AppendText(parts, code, -TextCells(code) * cell / 2, 1.75f + 3.5f * cell, cell);
     return;
   }
-  float text_top = kFieldBottom;  // Where the logo's box starts: above any name.
-  std::vector<std::string> lines;
-  float cell = 0;
+  float logo_bottom = kFieldBottom, logo_top = kFieldTop;  // The logo's box: what the name leaves.
   if (kBannerStyle == BannerStyle::LogoName) {
-    std::vector<std::string> words;
-    std::string word;
-    for (char c : std::string(kGuilds[index].name) + " ") {
-      if (c == ' ') {
-        if (!word.empty()) words.push_back(word);
-        word.clear();
-      } else if (c != '\'') {
-        word += c;
-      }
+    NameLines text;
+    if (!ChooseNameLines(code, kGuilds[index].name, text)) {  // Too long to read at the smallest size: the code.
+      text.above.clear();
+      text.below = {code};
+      text.cell = 0.09f;
     }
-    if (!FitName(words, lines, cell)) {  // Too long to read at the smallest size: the code under the logo.
-      lines = {code};
-      cell = 0.09f;
+    const float cell = text.cell;
+    float z = kFieldTop;  // Above the logo, from the top down.
+    for (const auto &line : text.above) {
+      AppendText(parts, line, -TextCells(line) * cell / 2, z, cell);
+      z -= 7 * cell + kLineGap;
     }
-    const float height = static_cast<float>(lines.size()) * 7 * cell + static_cast<float>(lines.size() - 1) * 2 * cell;
-    float z_top = kFieldBottom + height;
-    for (const auto &line : lines) {
-      AppendText(parts, line, -TextCells(line) * cell / 2, z_top, cell);
-      z_top -= 9 * cell;
+    if (!text.above.empty()) logo_top = z + kLineGap - kBlockGap;
+    z = kFieldBottom;  // Below it, from the bottom up.
+    for (size_t i = text.below.size(); i-- > 0;) {
+      z += 7 * cell;
+      AppendText(parts, text.below[i], -TextCells(text.below[i]) * cell / 2, z, cell);
+      z += kLineGap;
     }
-    text_top = kFieldBottom + height + 0.14f;
+    if (!text.below.empty()) logo_bottom = z - kLineGap + kBlockGap;
   }
-  FitParts(logo, -kFieldHalfWidth, text_top, kFieldHalfWidth, kFieldTop);
+  FitParts(logo, -kFieldHalfWidth, logo_bottom, kFieldHalfWidth, logo_top);
+  if (BannerLogoIsOutlined(index)) Append(parts, OutlineParts(logo));
   Append(parts, std::move(logo));
 }
 
@@ -1322,14 +1410,35 @@ uint32_t ContrastingLogoRgb(uint32_t banner_rgb, uint32_t logo_rgb) {
   return (ContrastRatio(banner_rgb, light) >= ContrastRatio(banner_rgb, dark)) ? light : dark;
 }
 
+namespace {
+
+// A guild's own logo color, before any contrast check: its icon color, or for an icon that is an existing shape
+// that shape's tag color (TagArrowColor in nameplate.cpp).
+uint32_t LogoBaseRgb(const Guild &g) {
+  if (!g.icon_key) return g.icon_rgb;
+  const std::string key = g.icon_key;
+  return (key == "WP") ? 0xe8e2d4 : (key == "E") ? 0xe8a020 : (key == "$") ? 0x3ab05a : 0xffffff;
+}
+
+// Guilds whose logo keeps its own color however little it contrasts with the flag, and gets a dark rim instead:
+// the white wolf is Wolf Pack's look.
+bool KeepsOwnColor(const Guild &g) { return std::string(g.code) == "WP"; }
+
+}  // namespace
+
 uint32_t BannerLogoRgb(int guild) {
   const Guild &g = kGuilds[guild];
-  uint32_t logo = g.icon_rgb;
-  if (g.icon_key) {  // An existing shape's drawing, in its own tag color (TagArrowColor in nameplate.cpp).
-    const std::string key = g.icon_key;
-    logo = (key == "WP") ? 0xe8e2d4 : (key == "E") ? 0xe8a020 : (key == "$") ? 0x3ab05a : 0xffffff;
-  }
-  return ContrastingLogoRgb(g.banner_rgb, logo);
+  return KeepsOwnColor(g) ? LogoBaseRgb(g) : ContrastingLogoRgb(g.banner_rgb, LogoBaseRgb(g));
+}
+
+uint32_t BannerTextRgb(int guild) {
+  const Guild &g = kGuilds[guild];
+  return ContrastingLogoRgb(g.banner_rgb, LogoBaseRgb(g));
+}
+
+bool BannerLogoIsOutlined(int guild) {
+  const Guild &g = kGuilds[guild];
+  return KeepsOwnColor(g) && ContrastRatio(g.banner_rgb, LogoBaseRgb(g)) < 3.0f;
 }
 
 int GlyphIndex(char c) {

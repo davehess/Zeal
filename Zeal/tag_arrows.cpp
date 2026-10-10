@@ -777,13 +777,20 @@ TagArrows::RenderInfo TagArrows::AllocateIconShape(const Arrow &tag) {
   Gradient logo_light_gradient2(logo_light, logo_grey_back, min_z, max_z, 0.0f, 0.7f);
   Gradient logo_shade_gradient(logo_shade, logo_grey, min_z, max_z);
   Gradient logo_shade_gradient2(logo_shade, logo_grey_back, min_z, max_z, 0.0f, 0.7f);
+  // The name written on a banner has its own contrast-checked color (a logo may keep a color the name cannot).
+  const D3DCOLOR text = is_banner ? (0xff000000u | TagShapes::BannerTextRgb(banner)) : tag.color;
+  const bool text_light = (((text >> 16) & 0xFF) * 299 + ((text >> 8) & 0xFF) * 587 + (text & 0xFF) * 114) / 1000 > 140;
+  Gradient text_gradient(text, text_light ? 255 : 0, min_z, max_z);
+  Gradient text_gradient2(text, text_light ? 200 : 0, min_z, max_z, 0.0f, 0.7f);
 
   std::vector<ArrowVertex> vertices;
   vertices.reserve(icon.mesh.vertices.size());
   for (const auto &vertex : icon.mesh.vertices) {
     const auto tone = (vertex.tone == TagShapes::Tone::Contrast) ? contrast : vertex.tone;
     D3DCOLOR color = dark;
-    if (tone == TagShapes::Tone::Logo)
+    if (tone == TagShapes::Tone::LogoText)
+      color = vertex.y < 0 ? text_gradient.GetColor(vertex.z) : text_gradient2.GetColor(vertex.z);
+    else if (tone == TagShapes::Tone::Logo)
       color = vertex.y < 0 ? logo_gradient.GetColor(vertex.z) : logo_gradient2.GetColor(vertex.z);
     else if (tone == TagShapes::Tone::LogoLight)
       color = vertex.y < 0 ? logo_light_gradient.GetColor(vertex.z) : logo_light_gradient2.GetColor(vertex.z);

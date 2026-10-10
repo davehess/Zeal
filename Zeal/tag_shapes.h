@@ -80,6 +80,7 @@ enum class Tone : uint8_t {
   LogoDark,
   LogoLight,
   LogoShade,
+  LogoText,  // The name on a banner: BannerTextRgb(guild).
 };
 
 struct Vertex {
@@ -109,6 +110,11 @@ uint32_t ContrastingLogoRgb(uint32_t banner_rgb, uint32_t logo_rgb);
 
 // The logo color of a guild's banner (an index into kGuilds): ContrastingLogoRgb of its banner and icon colors.
 uint32_t BannerLogoRgb(int guild);
+
+// The color of the name written on a guild's banner: always contrast-checked (BannerLogoRgb is not for a guild
+// whose logo keeps its own color), and whether that logo then needs a dark rim to stand out from the flag.
+uint32_t BannerTextRgb(int guild);
+bool BannerLogoIsOutlined(int guild);
 
 // Returns the paw glyph index (0 to 35) of '0'-'9' or 'A'-'Z' (either case), else -1.
 int GlyphIndex(char c);
