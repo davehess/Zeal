@@ -6,8 +6,8 @@ A Zeal tag can show a picture in place of its built-in mark:
   ^I<name>^   shows <name>.png or I<name>.png (or .tga). Example: ^IEUR^ shows EUR.png
               or IEUR.png. For a guild code it replaces that guild's built-in icon.
               (Windows allows no file called CON.png, so use ICON.png for ^ICON^.)
-  ^B<code>^   a guild's banner. A picture named B<code>.png replaces it.
-              Example: BEUR.png replaces the banner ^BEUR^.
+  ^F<code>^   a guild's banner (F for flag). A picture named F<code>.png replaces it.
+              Example: FEUR.png replaces the banner ^FEUR^.
 
 Type /tag guilds in game for the guild codes.
 
@@ -23,7 +23,7 @@ The three folders
                        survive updates. Type /tag icons in game and Zeal creates the folder
                        if it is missing.
 
-  tagicons\templates\  Every guild's built-in icon (I<code>.png) and banner (B<code>.png) as
+  tagicons\templates\  Every guild's built-in icon (I<code>.png) and banner (F<code>.png) as
                        a picture, 160 x 160 with a transparent background. Zeal does not read
                        this folder; the files are a starting point.
 
@@ -31,7 +31,7 @@ The three folders
 To change a guild's icon or banner
 ----------------------------------
 
-  1. Copy its file from templates\ into custom\ (for example IEUR.png or BEUR.png).
+  1. Copy its file from templates\ into custom\ (for example IEUR.png or FEUR.png).
   2. Edit it in any image editor that keeps transparency (PNG, or 32-bit TGA).
   3. In game, type /tag icons. Your picture is used from then on, and the list
      marks it "(yours)".

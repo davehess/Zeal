@@ -35,11 +35,14 @@ Summarizes notable changes to Zeal
 * Named pipe `custom` messages now announce `ARI set <password>` / `ARI clear` and `ARL on` / `ARL off` (never the
   ARL password). The raid leader is already in the raid message as `rank` `Raid Leader`
 
-* Guild banners (`^B<code>^`) now carry the guild's logo (the same drawing as its `^I<code>^` icon) and its name
+* Guild banners (`^F<code>^`, F for flag) now carry the guild's logo (the same drawing as its `^I<code>^` icon) and its name
   instead of its three letters, the name split over lines above and below the logo where that lets it be bigger.
   The longest name, Intervention, is split with a hyphen (INTER- / VENTION) and Tranquility shows its short name, TRANQ. The logo is drawn in the same
   colors as the guild's icon, with a thin dark or light rim where those colors would not stand out from the flag, and
   the name is near-black or near-white, whichever reads better on the flag. The Burnouts icon is now a lit rolled cigarette instead of a burning match
+
+* Guild banners use `^F<code>^` (F for flag), like `^FEUR^`; `^B<code>^` is no longer a banner key and is a blue
+  arrow again. `^F^` alone is still the flame. A picture that replaces a banner is now named `F<code>.png`
 
 ### Bug fixes
 

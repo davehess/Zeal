@@ -170,9 +170,9 @@ class NamePlate {
     DWORD color;
     DWORD tag_color;
     bool corpse_tag = false;     // The tag was set on the corpse (tags from before the death stay hidden).
-    std::string tag_image;       // Lower-case key of the tag's picture ("ieur" for EUR.png, "beur" for BEUR.png).
+    std::string tag_image;       // Lower-case key of the tag's picture ("ieur" for EUR.png, "feur" for FEUR.png).
     std::string tag_image_file;  // That picture's file, resolved when the tag is applied ("" if none).
-    bool guild_mark = false;     // The tag_color came from a guild banner or icon key (^B..^, ^I..^).
+    bool guild_mark = false;     // The tag_color came from a guild banner or icon key (^F..^, ^I..^).
   };
 
   struct RenderInfo {
