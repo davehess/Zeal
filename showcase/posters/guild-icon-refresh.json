@@ -1,12 +1,12 @@
 {
   "order": 11,
   "title": "Guild icons and banners, round two",
-  "pitch": "Every guild banner carries the guild's own logo, in a colour that stands out from the flag.",
-  "image": "guild-icon-refresh/banners-sheet.png",
+  "pitch": "Every guild banner carries the guild's own icon, in its own colours, and the guild's full name.",
+  "image": "guild-icon-refresh/icons-vs-banners.png",
   "bullets": [
-    "Logo on the flag instead of a three-letter code",
-    "Logo colour checked for contrast against the flag (3:1)",
-    "Optional guild name under the logo where it fits",
+    "The guild's icon on the flag instead of a three-letter code",
+    "Same colours as the icon, with a thin rim where it needs contrast",
+    "Full guild names, above and below the icon when they are long",
     "Burnouts: a lit rolled cigarette replaces the match"
   ],
   "try": "not in the test-all build yet (local draft branch, needs a build)",
