@@ -3,6 +3,16 @@
 Summarizes notable changes to Zeal
 
 
+## [Unreleased]
+
+### New features
+
+* The "Export data on /camp" option now also saves your `#popflags` output to `<name>-PoPFlags.txt`
+  - Sends `#popflags all` once per camp and writes the lines the server answers with, plus the character and a timestamp
+  - Nothing is written if the server does not answer
+  - Can also be run on demand with `/outputfile popflags [optional_filename]`
+
+
 ## [1.4.8] - 2026/10/01
 
 ### New features
