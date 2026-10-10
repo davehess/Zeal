@@ -68,6 +68,12 @@ class NamePlate {
     PvpAlly = 31,
   };
 
+  // Modes of setting_tag_guild_marks (/tag guildmarks): off hides every guild banner and icon, including ones
+  // other players tagged; tagged shows only tagged marks; auto adds each player's own guild icon.
+  static constexpr int kGuildMarksOff = 0;
+  static constexpr int kGuildMarksTagged = 1;
+  static constexpr int kGuildMarksAuto = 2;
+
   NamePlate(class ZealService *zeal);
   ~NamePlate();
 
@@ -92,6 +98,7 @@ class NamePlate {
   ZealSetting<bool> setting_tag_prettyprint = {false, "Zeal", "NameplateTagPrettyPrint", false};
   ZealSetting<bool> setting_tag_default_arrow = {true, "Zeal", "NameplateTagDefaultArrow", false};
   ZealSetting<bool> setting_tag_alternate_symbols = {false, "Zeal", "NameplateTagAlternateSymbols", false};
+  ZealSetting<int> setting_tag_guild_marks = {kGuildMarksTagged, "Zeal", "NameplateTagGuildMarks", false};
   ZealSetting<std::string> setting_tag_channel = {"", "Zeal", "NameplateTagChannel", false};
   ZealSetting<bool> setting_tag_persist = {true, "Zeal", "NameplateTagPersist", false};
 
@@ -161,6 +168,7 @@ class NamePlate {
     DWORD color;
     DWORD tag_color;
     bool corpse_tag = false;  // The tag was set on the corpse (tags from before the death stay hidden).
+    bool guild_mark = false;  // The tag_color came from a guild banner or icon key (^B..^, ^I..^).
   };
 
   struct RenderInfo {
@@ -202,6 +210,8 @@ class NamePlate {
   void load_saved_tags(const std::filesystem::path &filename);
   void write_saved_tags();
 
+  DWORD get_auto_guild_mark(const Zeal::GameStructures::Entity &entity, const Zeal::GameStructures::Entity *self);
+
   void clean_ui();
   void render_ui();
   void load_sprite_font();
@@ -209,6 +219,7 @@ class NamePlate {
   std::unique_ptr<SpriteFont> sprite_font;
   std::unique_ptr<class TagArrows> tag_arrows;
   std::unordered_map<struct Zeal::GameStructures::Entity *, NamePlateInfo> nameplate_info_map;
+  std::unordered_map<short, DWORD> guild_mark_cache;  // Guild id to its icon's tag color (Off if not in kGuilds).
   std::function<void()> update_options_ui_callback;
   std::function<unsigned int(int)> get_color_callback;
   int tag_channel_number = -1;
