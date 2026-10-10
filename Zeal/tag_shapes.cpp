@@ -792,7 +792,7 @@ bool ChooseNameLines(const std::string &code, const std::string &name, NameLines
   };
   static const Chosen kChosen[] = {{"HBM", {"HERE", "THERE"}, {"BE", "MONSTERS"}},
                                    {"INT", {}, {"INTER-", "VENTION"}},
-                                   {"TRQ", {}, {"TRANQ-", "UILITY"}}};
+                                   {"TRQ", {}, {"TRANQ"}}};  // The guild's own short name.
   for (const auto &chosen : kChosen)
     if (code == chosen.code) {
       NameLines layout;
