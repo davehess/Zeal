@@ -345,6 +345,29 @@ std::vector<Part> CrossedSwordsTargetParts() {
   }
   return parts;
 }
+std::vector<Part> HourglassParts() {
+  // Slow: two glass triangles tip to tip between a top and a bottom plate and two posts, with sand piled in
+  // the lower bulb, a thin stream through the neck and a little still in the upper one.
+  constexpr float kHalfWidth = 0.65f;  // Of each glass bulb at its plate.
+  constexpr float kBottom = 0.2f, kNeck = 1.35f, kTop = 2.5f;
+  // The half width of the lower and upper bulbs at height z.
+  auto lower = [&](float z) { return kHalfWidth * (kNeck - z) / (kNeck - kBottom); };
+  auto upper = [&](float z) { return kHalfWidth * (z - kNeck) / (kTop - kNeck); };
+  std::vector<Part> parts;
+  parts.push_back({Rect(-0.85f, 0, 0.85f, kBottom), {0, kBottom / 2}, Tone::Shade});  // Plates.
+  parts.push_back({Rect(-0.85f, kTop, 0.85f, kTop + kBottom), {0, kTop + kBottom / 2}, Tone::Shade});
+  for (float x : {-0.72f, 0.72f})  // Posts.
+    parts.push_back({Rect(x - 0.07f, kBottom, x + 0.07f, kTop), {x, (kBottom + kTop) / 2}, Tone::Shade});
+  parts.push_back(Raised({{-kHalfWidth, kBottom}, {kHalfWidth, kBottom}, {0, kNeck}}, {0, 0.6f}, Tone::Light, 1));
+  parts.push_back(Raised({{0, kNeck}, {kHalfWidth, kTop}, {-kHalfWidth, kTop}}, {0, 2.1f}, Tone::Light, 1));
+  const float pile = 0.85f;  // Height of the sand in the lower bulb.
+  parts.push_back(Raised({{-kHalfWidth, kBottom}, {kHalfWidth, kBottom}, {lower(pile), pile}, {-lower(pile), pile}},
+                         {0, 0.5f}, Tone::Base, 2));
+  parts.push_back(Raised(Rect(-0.04f, pile, 0.04f, 1.55f), {0, 1.2f}, Tone::Base, 2));  // Stream.
+  parts.push_back(Raised({{0, kNeck}, {upper(1.75f), 1.75f}, {-upper(1.75f), 1.75f}}, {0, 1.6f}, Tone::Base, 2));
+  return parts;
+}
+
 std::vector<Part> LuteParts() {
   // A lute, built upright (neck up) and then tilted like the bard's instrument in hand.
   std::vector<Part> parts;
@@ -1141,6 +1164,9 @@ Mesh Build(Kind kind) {
       break;
     case Kind::CrossedSwordsTarget:
       parts = CrossedSwordsTargetParts();
+      break;
+    case Kind::Hourglass:
+      parts = HourglassParts();
       break;
     default:
       if (kind >= Kind::Number1 && kind <= Kind::Number12)

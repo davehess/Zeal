@@ -17,6 +17,11 @@ Summarizes notable changes to Zeal
 * Added a main assist tag shape `^MA^`: two crossed swords with a target where they cross. Only one
   nameplate carries it at a time; tagging a new one removes it from the previous holder
 
+* The moon (mez) tag key is now `^MEZ^` instead of `^M^`. The single letter `M` no longer picks a shape, so
+  `^MA^`, `^MEZ^` and any other tag starting with M can never fall back to the moon
+
+* Added a slow tag shape `^SLOW^`: an hourglass
+
 
 ## [1.4.8] - 2026/10/01
 

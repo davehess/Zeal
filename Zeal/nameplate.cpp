@@ -46,7 +46,7 @@ enum TagArrowColor : DWORD {
   Nameplate = 1,
   Paw = D3DCOLOR_XRGB(0x20, 0xc0, 0x20),       // Ensure this is unique.
   StopSign = D3DCOLOR_XRGB(0xf0, 0x00, 0x00),  // Ensure this is unique.
-  Skull = D3DCOLOR_XRGB(0xe8, 0xe2, 0xd1),     // Icon shapes (keys K X A D F T WP M U N H $ E MA): ensure unique.
+  Skull = D3DCOLOR_XRGB(0xe8, 0xe2, 0xd1),     // Icon shapes (keys K X A D F T WP MEZ U N H $ E MA SLOW): ensure unique.
   Cross = D3DCOLOR_XRGB(0xe8, 0x1c, 0x1c),
   Sword = D3DCOLOR_XRGB(0xf2, 0xc0, 0x2a),
   Diamond = D3DCOLOR_XRGB(0x2e, 0x8c, 0xf5),
@@ -60,6 +60,7 @@ enum TagArrowColor : DWORD {
   Dollar = D3DCOLOR_XRGB(0x3a, 0xb0, 0x5a),
   Euro = D3DCOLOR_XRGB(0xe8, 0xa0, 0x20),
   MainAssist = D3DCOLOR_XRGB(0x18, 0xd8, 0xd0),  // Key MA (crossed swords with a target): ensure unique.
+  Slow = D3DCOLOR_XRGB(0xf2, 0x24, 0xf2),        // Key SLOW (an hourglass): ensure unique.
   Red = D3DCOLOR_XRGB(0xff, 0, 0),
   Orange = D3DCOLOR_XRGB(0xff, 0x80, 0),
   Yellow = D3DCOLOR_XRGB(0xff, 0xff, 0),
@@ -214,8 +215,8 @@ static bool TagColorsAreUnique() {
       TagArrowColor::Sword,  TagArrowColor::Diamond,  TagArrowColor::Flame,  TagArrowColor::Star,
       TagArrowColor::Wolf,   TagArrowColor::Moon,     TagArrowColor::Lasso,  TagArrowColor::Lute,
       TagArrowColor::Shield, TagArrowColor::Dollar,   TagArrowColor::Euro,   TagArrowColor::MainAssist,
-      TagArrowColor::Red,    TagArrowColor::Orange,   TagArrowColor::Yellow, TagArrowColor::Green,
-      TagArrowColor::Blue,   TagArrowColor::White};
+      TagArrowColor::Slow,   TagArrowColor::Red,      TagArrowColor::Orange, TagArrowColor::Yellow,
+      TagArrowColor::Green,  TagArrowColor::Blue,     TagArrowColor::White};
   for (int number = 1; number <= kMaxTagNumber; ++number) colors.push_back(GetNumberColor(number));
   for (int glyph = 0; glyph < kPawGlyphCount; ++glyph) colors.push_back(kPawGlyphColorBase + glyph);
   for (int i = 0; i < TagShapes::kGuildCount; ++i) {
@@ -274,6 +275,8 @@ static const char *GetShapeName(DWORD tag_color) {
       return "Euro";
     case TagArrowColor::MainAssist:
       return "Main Assist";
+    case TagArrowColor::Slow:
+      return "Slow";
     default:
       break;
   }
@@ -322,6 +325,8 @@ static TagArrows::Shape GetTagShape(DWORD tag_color) {
       return TagArrows::Shape::Euro;
     case TagArrowColor::MainAssist:
       return TagArrows::Shape::MainAssist;
+    case TagArrowColor::Slow:
+      return TagArrows::Shape::Slow;
     default:
       break;
   }
@@ -1749,8 +1754,8 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   Zeal::Game::print_chat("Usage: <message> prefixes: '+' to append, '^R^' or '*R:' for color arrow (R, O, Y, G, B, W)");
   Zeal::Game::print_chat(
       "Usage: shapes in place of the color: P paw, S stop, K skull, X x, A sword, D diamond, F flame, T star, "
-      "WP wolf, M moon, U lasso, N lute, H shield, $ dollar, E euro, MA main assist (crossed swords with a "
-      "target, one at a time)");
+      "WP wolf, MEZ moon (mez), U lasso, N lute, H shield, $ dollar, E euro, MA main assist (crossed swords "
+      "with a target, one at a time), SLOW hourglass");
   Zeal::Game::print_chat("Usage: numbered badges in place of the color: 1 to 12 (like '^7^' or '^12^')");
   Zeal::Game::print_chat("Usage: a paw with a letter or digit on it: P then the character (like '^PK^')");
   Zeal::Game::print_chat(
@@ -1771,28 +1776,49 @@ static int ReadGuildKey(const std::string &key, char kind) {
   return TagShapes::GuildIndex(key.substr(1));
 }
 
+// Shapes with a multi-letter key, matched exactly (either case) and only when closed by a '^'. The keys are
+// whole words, so one that is not listed ("^Mxx^") never falls back to the shape of its first letter.
+static const struct {
+  const char *key;
+  DWORD color;
+} kNamedTagKeys[] = {
+    {"WP", TagArrowColor::Wolf},
+    {"MA", TagArrowColor::MainAssist},
+    {"MEZ", TagArrowColor::Moon},
+    {"SLOW", TagArrowColor::Slow},
+};
+
+// Returns the length of the named key that "^key^" starts with (one of kNamedTagKeys), else 0.
+static size_t ReadNamedKeyLength(const std::string &text) {
+  for (const auto &named : kNamedTagKeys) {
+    const size_t length = std::strlen(named.key);
+    if (text.size() > length + 1 && text[length + 1] == '^' && ToLower(text.substr(1, length)) == ToLower(named.key))
+      return length;
+  }
+  return 0;
+}
+
 // Returns the key of a "^key^" prefix (text starts with '^'): two digits for "^10^" to "^12^", 'P' plus
-// a letter or digit for a paw with that character ("^PK^"), "WP" for the wolf ("^WP^"), "MA" for the main
-// assist's crossed swords ("^MA^"), 'B' or 'I' plus a guild code for that guild's banner or icon ("^BEUR^",
-// "^IEUR^"), 'I' plus the code of a picture in the tagicons folder, else the single character after the
-// '^'. Older clients read only the first character,
-// so "^PK^" shows them a plain paw, "^WP^" a white arrow, "^MA^" the moon and "^BEUR^" a blue one.
+// a letter or digit for a paw with that character ("^PK^"), a named key from kNamedTagKeys ("^WP^" the wolf,
+// "^MA^" the main assist's crossed swords, "^MEZ^" the moon, "^SLOW^" the hourglass), 'B' or 'I' plus a guild
+// code for that guild's banner or icon ("^BEUR^", "^IEUR^"), 'I' plus the code of a picture in the tagicons
+// folder, else the single character after the '^'. Older clients read only the first character, so "^PK^"
+// shows them a plain paw, "^WP^" a white arrow, "^MA^" and "^MEZ^" the moon, "^SLOW^" a stop sign and "^BEUR^" a blue
+// arrow.
 static std::string ReadTagKey(const std::string &text) {
   bool two_digits = text.size() > 3 && std::isdigit(static_cast<unsigned char>(text[1])) &&
                     std::isdigit(static_cast<unsigned char>(text[2])) && text[3] == '^';
   bool paw_glyph =
       text.size() > 3 && (text[1] == 'p' || text[1] == 'P') && TagShapes::GlyphIndex(text[2]) >= 0 && text[3] == '^';
-  bool wolf =
-      text.size() > 3 && (text[1] == 'w' || text[1] == 'W') && (text[2] == 'p' || text[2] == 'P') && text[3] == '^';
-  bool main_assist =
-      text.size() > 3 && (text[1] == 'm' || text[1] == 'M') && (text[2] == 'a' || text[2] == 'A') && text[3] == '^';
+  const size_t named_length = ReadNamedKeyLength(text);
   // A guild or picture key runs to the next '^' and must name one, so "^Blue^" stays a blue arrow.
   const size_t end = text.find('^', 1);
   if (end != std::string::npos) {
     const std::string key = text.substr(1, end - 1);
     if (ReadGuildKey(key, 'b') >= 0 || ReadGuildKey(key, 'i') >= 0 || GetTagImage(key)) return key;
   }
-  return text.substr(1, (two_digits || paw_glyph || wolf || main_assist) ? 2 : 1);
+  if (named_length) return text.substr(1, named_length);
+  return text.substr(1, (two_digits || paw_glyph) ? 2 : 1);
 }
 
 // Returns a RGB color based on the key (else TagArrowColor::Off if no match).
@@ -1807,10 +1833,8 @@ static D3DCOLOR GetTagArrowColor(const std::string &key) {
     int glyph = TagShapes::GlyphIndex(key[1]);
     return (glyph >= 0) ? kPawGlyphColorBase + glyph : TagArrowColor::Off;
   }
-  if (key.size() == 2 && (key[0] == 'w' || key[0] == 'W') && (key[1] == 'p' || key[1] == 'P'))
-    return TagArrowColor::Wolf;
-  if (key.size() == 2 && (key[0] == 'm' || key[0] == 'M') && (key[1] == 'a' || key[1] == 'A'))
-    return TagArrowColor::MainAssist;
+  for (const auto &named : kNamedTagKeys)
+    if (ToLower(key) == ToLower(named.key)) return named.color;
   if (int guild = ReadGuildKey(key, 'b'); guild >= 0) return GetGuildBannerColor(guild);
   if (int guild = ReadGuildKey(key, 'i'); guild >= 0) {
     const char *icon_key = TagShapes::kGuilds[guild].icon_key;
@@ -1846,8 +1870,6 @@ static D3DCOLOR GetTagArrowColor(const std::string &key) {
       return TagArrowColor::Flame;
     case 't':
       return TagArrowColor::Star;
-    case 'm':
-      return TagArrowColor::Moon;
     case 'u':
       return TagArrowColor::Lasso;
     case 'n':

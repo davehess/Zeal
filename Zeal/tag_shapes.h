@@ -5,7 +5,7 @@
 #include <vector>
 
 // Geometry for the icon-style tag shapes (skull, cross, sword, diamond, flame, star, wolf, moon, lasso,
-// lute, shield, dollar, euro), the numbered badges 1 to 12, the letters and digits drawn on the pet paw,
+// lute, shield, dollar, euro, hourglass), the numbered badges 1 to 12, the letters and digits drawn on the pet paw,
 // a banner and an icon for each guild in kGuilds, and the main assist's crossed swords.
 //
 // Each shape is a set of flat parts extruded to a thickness. Most parts are convex (or at least
@@ -60,6 +60,7 @@ enum class Kind {
   GuildIcon0,  // Empty for a guild whose icon is an existing shape (icon_key).
   GuildIconLast = GuildIcon0 + kGuildCount - 1,
   CrossedSwordsTarget,  // The main assist (^MA^): two swords crossed in an X with a target where they cross.
+  Hourglass,            // Slow (^SLOW^): two triangles tip to tip in a frame, with sand in the lower one.
   Count,      // Number of shapes (not a shape).
 };
 

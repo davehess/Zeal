@@ -39,6 +39,7 @@ class TagArrows {
     GuildIcon0 = 94,  // Guild icons, in TagShapes::kGuilds order, up to GuildIconLast.
     GuildIconLast = 123,
     MainAssist = 124,  // The main assist: crossed swords with a target (TagShapes::Kind::CrossedSwordsTarget).
+    Slow = 125,        // An hourglass (TagShapes::Kind::Hourglass).
   };
 
   // Vertices allow texturing and color modulation.
