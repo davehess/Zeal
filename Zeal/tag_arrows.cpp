@@ -755,29 +755,37 @@ TagArrows::RenderInfo TagArrows::AllocateIconShape(const Arrow &tag) {
   Gradient shade_gradient(shade, 150, min_z, max_z);
   Gradient shade_gradient2(shade, 50, min_z, max_z, 0.0f, 0.7f);
 
-  // A guild banner's logo parts take the logo color (contrast-checked against the flag by TagShapes::
-  // BannerLogoRgb), shaded toward white on a light logo and toward black on a dark one so they keep their
-  // contrast with the flag all the way down it.
+  // A guild banner's logo is drawn like the guild's own icon: the Logo tones are Base, Dark, Light and Shade of
+  // the icon's color (TagShapes::BannerLogoRgb), lit over the logo's own height rather than the whole flag's.
+  // The name and the logo's rim take the contrast-checked TagShapes::BannerTextRgb.
+  constexpr float kIconSpan = 2.6f;  // About the height of an icon, which is what its lighting is spread over.
   const int banner = index - static_cast<int>(TagShapes::Kind::Banner0);
   const bool is_banner = banner >= 0 && banner < TagShapes::kGuildCount;
+  const auto is_logo_tone = [](TagShapes::Tone t) {
+    return t == TagShapes::Tone::Logo || t == TagShapes::Tone::LogoDark || t == TagShapes::Tone::LogoLight ||
+           t == TagShapes::Tone::LogoShade || t == TagShapes::Tone::Eye;
+  };
+  float logo_min = 1e9f, logo_max = -1e9f;
+  if (is_banner)
+    for (const auto &vertex : icon.mesh.vertices)
+      if (is_logo_tone(vertex.tone)) {
+        logo_min = min(logo_min, vertex.z);
+        logo_max = max(logo_max, vertex.z);
+      }
+  const float logo_scale = kIconSpan / max(logo_max - logo_min, 0.1f);
   const D3DCOLOR logo = is_banner ? (0xff000000u | TagShapes::BannerLogoRgb(banner)) : tag.color;
-  const int logo_luminance = static_cast<int>(
-      (((logo >> 16) & 0xFF) * 299 + ((logo >> 8) & 0xFF) * 587 + (logo & 0xFF) * 114) / 1000);
-  const int logo_grey = (logo_luminance > 140) ? 255 : 0, logo_grey_back = (logo_luminance > 140) ? 200 : 0;
   const D3DCOLOR logo_light = LightenColor(logo);
-  // Shaded parts are darker than a light logo, but lighter than a dark one (which would swallow them).
-  const auto shaded = [&](int c) { return (logo_luminance > 140) ? c * 7 / 10 : c + (255 - c) * 3 / 10; };
-  const D3DCOLOR logo_shade =
-      D3DCOLOR_XRGB(shaded((logo >> 16) & 0xFF), shaded((logo >> 8) & 0xFF), shaded(logo & 0xFF));
-  const D3DCOLOR logo_dark =
-      D3DCOLOR_XRGB(((logo >> 16) & 0xFF) / 6, ((logo >> 8) & 0xFF) / 6, (logo & 0xFF) / 6);
-  Gradient logo_gradient(logo, logo_grey, min_z, max_z);
-  Gradient logo_gradient2(logo, logo_grey_back, min_z, max_z, 0.0f, 0.7f);
-  Gradient logo_light_gradient(logo_light, logo_grey, min_z, max_z);
-  Gradient logo_light_gradient2(logo_light, logo_grey_back, min_z, max_z, 0.0f, 0.7f);
-  Gradient logo_shade_gradient(logo_shade, logo_grey, min_z, max_z);
-  Gradient logo_shade_gradient2(logo_shade, logo_grey_back, min_z, max_z, 0.0f, 0.7f);
-  // The name written on a banner has its own contrast-checked color (a logo may keep a color the name cannot).
+  const D3DCOLOR logo_shade = D3DCOLOR_XRGB(((logo >> 16) & 0xFF) * 7 / 10, ((logo >> 8) & 0xFF) * 7 / 10,
+                                            (logo & 0xFF) * 7 / 10);
+  const D3DCOLOR logo_dark = D3DCOLOR_XRGB(((logo >> 16) & 0xFF) / 6, ((logo >> 8) & 0xFF) / 6, (logo & 0xFF) / 6);
+  Gradient logo_gradient(logo, 192, 0.0f, kIconSpan);
+  Gradient logo_gradient2(logo, 64, 0.0f, kIconSpan, 0.0f, 0.7f);
+  Gradient logo_light_gradient(logo_light, 224, 0.0f, kIconSpan);
+  Gradient logo_light_gradient2(logo_light, 96, 0.0f, kIconSpan, 0.0f, 0.7f);
+  Gradient logo_shade_gradient(logo_shade, 150, 0.0f, kIconSpan);
+  Gradient logo_shade_gradient2(logo_shade, 50, 0.0f, kIconSpan, 0.0f, 0.7f);
+  Gradient logo_eye_gradient(kEyeYellow, 255, 0.0f, kIconSpan, 0.55f);
+  Gradient logo_eye_gradient2(kEyeYellow, 160, 0.0f, kIconSpan, 0.4f);
   const D3DCOLOR text = is_banner ? (0xff000000u | TagShapes::BannerTextRgb(banner)) : tag.color;
   const bool text_light = (((text >> 16) & 0xFF) * 299 + ((text >> 8) & 0xFF) * 587 + (text & 0xFF) * 114) / 1000 > 140;
   Gradient text_gradient(text, text_light ? 255 : 0, min_z, max_z);
@@ -788,14 +796,17 @@ TagArrows::RenderInfo TagArrows::AllocateIconShape(const Arrow &tag) {
   for (const auto &vertex : icon.mesh.vertices) {
     const auto tone = (vertex.tone == TagShapes::Tone::Contrast) ? contrast : vertex.tone;
     D3DCOLOR color = dark;
+    const float height = (is_banner && is_logo_tone(tone)) ? (vertex.z - logo_min) * logo_scale : vertex.z;
     if (tone == TagShapes::Tone::LogoText)
       color = vertex.y < 0 ? text_gradient.GetColor(vertex.z) : text_gradient2.GetColor(vertex.z);
+    else if (is_banner && tone == TagShapes::Tone::Eye)
+      color = vertex.y < 0 ? logo_eye_gradient.GetColor(height) : logo_eye_gradient2.GetColor(height);
     else if (tone == TagShapes::Tone::Logo)
-      color = vertex.y < 0 ? logo_gradient.GetColor(vertex.z) : logo_gradient2.GetColor(vertex.z);
+      color = vertex.y < 0 ? logo_gradient.GetColor(height) : logo_gradient2.GetColor(height);
     else if (tone == TagShapes::Tone::LogoLight)
-      color = vertex.y < 0 ? logo_light_gradient.GetColor(vertex.z) : logo_light_gradient2.GetColor(vertex.z);
+      color = vertex.y < 0 ? logo_light_gradient.GetColor(height) : logo_light_gradient2.GetColor(height);
     else if (tone == TagShapes::Tone::LogoShade)
-      color = vertex.y < 0 ? logo_shade_gradient.GetColor(vertex.z) : logo_shade_gradient2.GetColor(vertex.z);
+      color = vertex.y < 0 ? logo_shade_gradient.GetColor(height) : logo_shade_gradient2.GetColor(height);
     else if (tone == TagShapes::Tone::LogoDark)
       color = logo_dark;
     else if (tone == TagShapes::Tone::Base)

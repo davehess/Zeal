@@ -66,9 +66,9 @@ enum class Kind {
 
 // Which color a vertex takes: the tag color, a dark accent, a light accent, whichever of the two
 // accents contrasts with the tag color (the digits on a numbered badge), a fixed eye yellow, or a
-// shaded version of the tag color (the moon's craters). The Logo tones are for the logo on a guild banner:
-// they take BannerLogoRgb(guild) (below) instead of the banner's color, plus a dark, a light and a shaded
-// accent of it, so the logo contrasts with the flag it hangs on and still keeps its own shading.
+// shaded version of the tag color (the moon's craters). The Logo tones are for the logo on a guild banner: they
+// resolve as Base, Dark, Light and Shade do for the guild's own icon (BannerLogoRgb), so the logo looks like its
+// ^I<code>^ icon, and LogoText is the name's color (BannerTextRgb), which is also the logo's rim.
 enum class Tone : uint8_t {
   Base = 0,
   Dark,
@@ -104,15 +104,16 @@ Mesh Build(Kind kind);
 float RelativeLuminance(uint32_t rgb);
 float ContrastRatio(uint32_t a, uint32_t b);
 
-// The color a logo drawn on a banner of banner_rgb should have: the logo's own color when it contrasts with the
+// The color a mark written on a banner of banner_rgb should have: the given color when it contrasts with the
 // banner by at least 3:1, else a near-white or near-black tint of it, whichever contrasts more.
 uint32_t ContrastingLogoRgb(uint32_t banner_rgb, uint32_t logo_rgb);
 
-// The logo color of a guild's banner (an index into kGuilds): ContrastingLogoRgb of its banner and icon colors.
+// The color of a guild's logo (an index into kGuilds): its icon color, or the color of the shape its icon reuses.
 uint32_t BannerLogoRgb(int guild);
 
-// The color of the name written on a guild's banner: always contrast-checked (BannerLogoRgb is not for a guild
-// whose logo keeps its own color), and whether that logo then needs a dark rim to stand out from the flag.
+// The color of the name written on a guild's banner, and of the rim round its logo: ContrastingLogoRgb of the
+// banner and logo colors. BannerLogoIsOutlined says whether the logo's own color fails 3:1 against the flag, so
+// the banner draws that rim.
 uint32_t BannerTextRgb(int guild);
 bool BannerLogoIsOutlined(int guild);
 

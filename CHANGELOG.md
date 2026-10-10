@@ -24,9 +24,9 @@ Summarizes notable changes to Zeal
 
 * Guild banners (`^B<code>^`) now carry the guild's logo (the same drawing as its `^I<code>^` icon) and its name
   instead of its three letters, the name split over lines above and below the logo where that lets it be bigger.
-  Names too long to read at the smallest size still show the code under the logo. The logo and name take the guild's
-  icon color when that stands out from the flag, else a near-white or near-black version of it (Wolf Pack's wolf stays
-  white, with a dark rim). The Burnouts icon is now a lit rolled cigarette instead of a burning match
+  Names too long to read at the smallest size still show the code under the logo. The logo is drawn in the same
+  colors as the guild's icon, with a thin dark or light rim where those colors would not stand out from the flag, and
+  the name is near-black or near-white, whichever reads better on the flag. The Burnouts icon is now a lit rolled cigarette instead of a burning match
 
 
 ## [1.4.8] - 2026/10/01

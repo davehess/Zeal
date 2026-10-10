@@ -707,7 +707,7 @@ constexpr float kFieldHalfWidth = 0.74f, kFieldBottom = 0.85f, kFieldTop = 2.52f
 // read at raid distance (a cell of 0.03 is a letter 0.21 tall, 31% of the code's).
 constexpr float kNameMaxCell = 0.055f, kNameMinCell = 0.03f, kNameWidth = 1.6f;
 constexpr float kLineGap = 0.05f;       // Between two lines of text.
-constexpr float kBlockGap = 0.08f;      // Between text and the logo.
+constexpr float kBlockGap = 0.1f;       // Between text and the logo (its rim takes some).
 constexpr float kGoodLogoHeight = 0.6f;  // The logo gets this much room if the letters can stay readable,
 constexpr float kMinLogoHeight = 0.4f;   // and is never squeezed below this.
 
@@ -869,28 +869,45 @@ void FitParts(std::vector<Part> &parts, float x0, float z0, float x1, float z1) 
   }
 }
 
-// A dark rim for a logo that keeps its own light color on a flag it does not contrast with: the whole drawing a
-// little larger, flat, just above the field and below the logo.
-std::vector<Part> OutlineParts(const std::vector<Part> &logo) {
-  float min_x = 1e9f, max_x = -1e9f, min_z = 1e9f, max_z = -1e9f;
-  for (const auto &part : logo)
-    for (const auto &point : part.outline) {
-      min_x = std::min(min_x, point.x);
-      max_x = std::max(max_x, point.x);
-      min_z = std::min(min_z, point.z);
-      max_z = std::max(max_z, point.z);
-    }
-  constexpr float kGrow = 1.06f;
-  const Point middle = {(min_x + max_x) / 2, (min_z + max_z) / 2};
-  const auto grow = [&](Point p) {
-    return Point{middle.x + (p.x - middle.x) * kGrow, middle.z + (p.z - middle.z) * kGrow};
+// A polygon's outline pushed outward by d (a miter at each corner, capped), whichever way it winds.
+std::vector<Point> Offset(const std::vector<Point> &outline, float d) {
+  float area = 0;
+  for (size_t i = 0; i < outline.size(); ++i) {
+    const Point a = outline[i], b = outline[(i + 1) % outline.size()];
+    area += a.x * b.z - b.x * a.z;
+  }
+  const float side = (area >= 0) ? 1.0f : -1.0f;  // Counter-clockwise: the outside is to the right of each edge.
+  const auto normal = [&](Point a, Point b) {
+    const float dx = b.x - a.x, dz = b.z - a.z, length = sqrtf(dx * dx + dz * dz);
+    return (length < 1e-6f) ? Point{0, 0} : Point{side * dz / length, -side * dx / length};
   };
+  std::vector<Point> out;
+  const size_t n = outline.size();
+  for (size_t i = 0; i < n; ++i) {
+    const Point prev = outline[(i + n - 1) % n], cur = outline[i], next = outline[(i + 1) % n];
+    const Point n1 = normal(prev, cur), n2 = normal(cur, next);
+    Point m = {n1.x + n2.x, n1.z + n2.z};
+    const float length = sqrtf(m.x * m.x + m.z * m.z);
+    if (length < 1e-4f) {
+      out.push_back({cur.x + n1.x * d, cur.z + n1.z * d});
+      continue;
+    }
+    m = {m.x / length, m.z / length};
+    const float miter = std::min(2.0f, 1.0f / std::max(0.5f, m.x * n1.x + m.z * n1.z));
+    out.push_back({cur.x + m.x * d * miter, cur.z + m.z * d * miter});
+  }
+  return out;
+}
+
+// A thin rim for a logo whose own colors do not stand out from the flag: every part a little larger, flat, in the
+// banner's text color (near-black or near-white, whichever contrasts), just above the field and below the logo.
+std::vector<Part> RimParts(const std::vector<Part> &logo) {
+  constexpr float kRim = 0.035f;
   std::vector<Part> rim;
   for (const auto &part : logo) {
     Part copy = part;
-    for (auto &point : copy.outline) point = grow(point);
-    copy.center = grow(copy.center);
-    copy.tone = Tone::LogoDark;
+    copy.outline = Offset(part.outline, kRim);
+    copy.tone = Tone::LogoText;
     copy.y_front = -(kHalfThickness + 0.04f);
     copy.y_back = kHalfThickness + 0.04f;
     rim.push_back(std::move(copy));
@@ -941,7 +958,7 @@ void AppendBannerMark(std::vector<Part> &parts, int index) {
     if (!text.below.empty()) logo_bottom = z - kLineGap + kBlockGap;
   }
   FitParts(logo, -kFieldHalfWidth, logo_bottom, kFieldHalfWidth, logo_top);
-  if (BannerLogoIsOutlined(index)) Append(parts, OutlineParts(logo));
+  if (BannerLogoIsOutlined(index)) Append(parts, RimParts(logo));
   Append(parts, std::move(logo));
 }
 
@@ -1412,24 +1429,17 @@ uint32_t ContrastingLogoRgb(uint32_t banner_rgb, uint32_t logo_rgb) {
 
 namespace {
 
-// A guild's own logo color, before any contrast check: its icon color, or for an icon that is an existing shape
-// that shape's tag color (TagArrowColor in nameplate.cpp).
+// A guild's logo color: its icon color, or for an icon that is an existing shape that shape's tag color
+// (TagArrowColor in nameplate.cpp).
 uint32_t LogoBaseRgb(const Guild &g) {
   if (!g.icon_key) return g.icon_rgb;
   const std::string key = g.icon_key;
   return (key == "WP") ? 0xe8e2d4 : (key == "E") ? 0xe8a020 : (key == "$") ? 0x3ab05a : 0xffffff;
 }
 
-// Guilds whose logo keeps its own color however little it contrasts with the flag, and gets a dark rim instead:
-// the white wolf is Wolf Pack's look.
-bool KeepsOwnColor(const Guild &g) { return std::string(g.code) == "WP"; }
-
 }  // namespace
 
-uint32_t BannerLogoRgb(int guild) {
-  const Guild &g = kGuilds[guild];
-  return KeepsOwnColor(g) ? LogoBaseRgb(g) : ContrastingLogoRgb(g.banner_rgb, LogoBaseRgb(g));
-}
+uint32_t BannerLogoRgb(int guild) { return LogoBaseRgb(kGuilds[guild]); }
 
 uint32_t BannerTextRgb(int guild) {
   const Guild &g = kGuilds[guild];
@@ -1438,7 +1448,7 @@ uint32_t BannerTextRgb(int guild) {
 
 bool BannerLogoIsOutlined(int guild) {
   const Guild &g = kGuilds[guild];
-  return KeepsOwnColor(g) && ContrastRatio(g.banner_rgb, LogoBaseRgb(g)) < 3.0f;
+  return ContrastRatio(g.banner_rgb, LogoBaseRgb(g)) < 3.0f;
 }
 
 int GlyphIndex(char c) {
