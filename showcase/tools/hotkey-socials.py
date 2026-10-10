@@ -48,10 +48,12 @@ md = [f"# {ME} test hotkeys — {BUILD}", "",
       "1. Install the test build: Mimic → Settings → Zeal → Test build → Install. Put `EUR.tga` from "
       "wolfpack.quest/zeal-icons in `EverQuest\\uifiles\\zeal\\tagicons\\` (for TI2).",
       f"2. **Log {ME} out to character select or close EQ** (EQ rewrites the file when you camp).",
-      f"3. Open `EverQuest\\{ME}_pq.proj.ini` in Notepad and find `[Socials]`. **Delete every `Page{first}…` "
-      f"to `Page{last}…` line** (this replaces the earlier page 7–10 file too), then paste everything from "
-      f"`{ME}_test_socials.ini` under `[Socials]` (skip its first line). No `[Socials]` but a "
-      f"`Socials_{ME}_pq.proj.ini` file? Paste there instead.",
+      f"3. Open `EverQuest\\{ME}_pq.proj.ini` in Notepad (not `UI_{ME}_pq.proj.ini`). The format is the same "
+      "`Page<P>Button<N>Name / Color / Line1-5` your other characters use under `[Socials]`.\n"
+      "   - **A new character has no `[Socials]` section** (only `[Friends]` and `[Ignored]`): paste the whole "
+      f"`{ME}_test_socials.ini`, its `[Socials]` line included, at the end of the file.\n"
+      f"   - **It already has `[Socials]`:** delete every `Page{first}…` to `Page{last}…` line, then paste "
+      "everything except the first line under `[Socials]`.",
       f"4. Log in, `/log on`, open Actions → Socials, page {first}. Press **LEAVE x5**, then **JOIN**: the "
       "test channel is now `/1`.", "",
       "Afterwards, camp or relog to get your normal channels back. **Rejoin the Zeal tag channel before any "

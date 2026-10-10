@@ -1,5 +1,5 @@
 {
- "build": "test-all 2c5e006",
+ "build": "test-all 67bea01",
  "channel": "wpzt:zt10",
  "changes": {
   "TS": [
@@ -516,7 +516,7 @@
   [
    "PF1",
    "PF1 flags",
-   "#popflags reply, then saved to <you>-PoPFlags",
+   "overview + tiers 1-5 in chat, then saved",
    [
     "/outputfile popflags"
    ]
@@ -524,7 +524,7 @@
   [
    "PF2",
    "PF2 again",
-   "press within 10s: 'was just sent', no new file",
+   "within 15s: 'was just sent', no new file",
    [
     "/outputfile popflags"
    ]
@@ -532,7 +532,7 @@
   [
    "PF3",
    "PF3 name",
-   "wait 10s first: saved to pftest.txt",
+   "wait 15s first: saved to pftest.txt",
    [
     "/outputfile popflags pftest"
    ]
