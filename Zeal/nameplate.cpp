@@ -87,7 +87,7 @@ static int GetPawGlyph(DWORD tag_color) {
   return static_cast<int>(tag_color - kPawGlyphColorBase);
 }
 
-// Guild banners (^BEUR^) and guild icons (^IMAY^) each have their own color (TagShapes::kGuilds), which is
+// Guild banners (^FEUR^) and guild icons (^IMAY^) each have their own color (TagShapes::kGuilds), which is
 // how the shape is found again. A guild whose icon is an existing shape (icon_key) uses that shape's color.
 static DWORD GetGuildBannerColor(int guild) { return 0xff000000u | TagShapes::kGuilds[guild].banner_rgb; }
 
@@ -1195,7 +1195,7 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   }
 
   if (args.size() == 2 && args[1] == "guilds") {
-    Zeal::Game::print_chat("Guild banners ^B<code>^ and icons ^I<code>^ (like /tag local ^BEUR^):");
+    Zeal::Game::print_chat("Guild banners ^F<code>^ and icons ^I<code>^ (like /tag local ^FEUR^):");
     std::string line;
     for (int i = 0; i < TagShapes::kGuildCount; ++i) {
       line += std::string(line.empty() ? "" : ", ") + TagShapes::kGuilds[i].code + " " + TagShapes::kGuilds[i].name;
@@ -1293,7 +1293,7 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   Zeal::Game::print_chat("Usage: numbered badges in place of the color: 1 to 12 (like '^7^' or '^12^')");
   Zeal::Game::print_chat("Usage: a paw with a letter or digit on it: P then the character (like '^PK^')");
   Zeal::Game::print_chat(
-      "Usage: a guild's banner or icon: B or I then its code (like '^BEUR^'); /tag guilds lists them");
+      "Usage: a guild's banner (F for flag) or icon: F or I then its code (like '^FEUR^'); /tag guilds lists them");
   Zeal::Game::print_chat("Example: /tag rsay Assist me (broadcasts a tag to the raid)");
   Zeal::Game::print_chat(
       "Example: /tag rsgs Off tank (broadcasts a tag to raid if in raid else to group if in group else local)");
@@ -1301,17 +1301,17 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   return;
 }
 
-// Returns the guild index of a `kind` ('b' or 'i') plus guild code key (like "BEUR" or "imay"), else -1.
+// Returns the guild index of a `kind` ('f' or 'i') plus guild code key (like "FEUR" or "imay"), else -1.
 static int ReadGuildKey(const std::string &key, char kind) {
   if (key.size() < 3 || std::tolower(static_cast<unsigned char>(key[0])) != kind) return -1;
   return TagShapes::GuildIndex(key.substr(1));
 }
 
 // Returns the key of a "^key^" prefix (text starts with '^'): two digits for "^10^" to "^12^", 'P' plus
-// a letter or digit for a paw with that character ("^PK^"), "WP" for the wolf ("^WP^"), 'B' or 'I' plus
-// a guild code for that guild's banner or icon ("^BEUR^", "^IEUR^"), else the single character after the
+// a letter or digit for a paw with that character ("^PK^"), "WP" for the wolf ("^WP^"), 'F' or 'I' plus
+// a guild code for that guild's banner or icon ("^FEUR^", "^IEUR^"), else the single character after the
 // '^'. Older clients read only the first character, so "^PK^" shows them a plain paw, "^WP^" a white arrow
-// and "^BEUR^" a blue one.
+// and "^FEUR^" a flame.
 static std::string ReadTagKey(const std::string &text) {
   bool two_digits = text.size() > 3 && std::isdigit(static_cast<unsigned char>(text[1])) &&
                     std::isdigit(static_cast<unsigned char>(text[2])) && text[3] == '^';
@@ -1319,11 +1319,12 @@ static std::string ReadTagKey(const std::string &text) {
       text.size() > 3 && (text[1] == 'p' || text[1] == 'P') && TagShapes::GlyphIndex(text[2]) >= 0 && text[3] == '^';
   bool wolf =
       text.size() > 3 && (text[1] == 'w' || text[1] == 'W') && (text[2] == 'p' || text[2] == 'P') && text[3] == '^';
-  // A guild key runs to the next '^' and must name a guild, so "^Blue^" stays a blue arrow.
+  // A guild key runs to the next '^' and must name a guild, so "^Fire^" stays a flame and "^Blue^" a
+  // blue arrow.
   const size_t end = text.find('^', 1);
   if (end != std::string::npos) {
     const std::string key = text.substr(1, end - 1);
-    if (ReadGuildKey(key, 'b') >= 0 || ReadGuildKey(key, 'i') >= 0) return key;
+    if (ReadGuildKey(key, 'f') >= 0 || ReadGuildKey(key, 'i') >= 0) return key;
   }
   return text.substr(1, (two_digits || paw_glyph || wolf) ? 2 : 1);
 }
@@ -1342,7 +1343,7 @@ static D3DCOLOR GetTagArrowColor(const std::string &key) {
   }
   if (key.size() == 2 && (key[0] == 'w' || key[0] == 'W') && (key[1] == 'p' || key[1] == 'P'))
     return TagArrowColor::Wolf;
-  if (int guild = ReadGuildKey(key, 'b'); guild >= 0) return GetGuildBannerColor(guild);
+  if (int guild = ReadGuildKey(key, 'f'); guild >= 0) return GetGuildBannerColor(guild);
   if (int guild = ReadGuildKey(key, 'i'); guild >= 0) {
     const char *icon_key = TagShapes::kGuilds[guild].icon_key;
     return icon_key ? GetTagArrowColor(icon_key) : GetGuildIconColor(guild);
@@ -1503,7 +1504,7 @@ bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_m
   if (tag_text.size() > 2 && tag_text[0] == '^') {
     const std::string key = ReadTagKey(tag_text);
     it->second.tag_color = GetTagArrowColor(key);
-    it->second.guild_mark = ReadGuildKey(key, 'b') >= 0 || ReadGuildKey(key, 'i') >= 0;
+    it->second.guild_mark = ReadGuildKey(key, 'f') >= 0 || ReadGuildKey(key, 'i') >= 0;
     tag_text = tag_text.substr(1 + key.size());
   } else if (it->second.tag_color == TagArrowColor::Off || it->second.tag_color == TagArrowColor::Nameplate) {
     bool disable_arrow = !setting_tag_default_arrow.get() || entity->Type != Zeal::GameEnums::NPC ||

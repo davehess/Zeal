@@ -3,6 +3,14 @@
 Summarizes notable changes to Zeal
 
 
+## [Unreleased]
+
+### New features
+
+* Guild banners use `^F<code>^` (F for flag), like `^FEUR^`; `^B<code>^` is no longer a banner key and is a blue
+  arrow again. `^F^` alone is still the flame
+
+
 ## [1.4.8] - 2026/10/01
 
 ### New features

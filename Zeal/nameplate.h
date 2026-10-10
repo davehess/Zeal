@@ -132,7 +132,7 @@ class NamePlate {
     std::string tag_text;
     DWORD color;
     DWORD tag_color;
-    bool guild_mark = false;  // The tag_color came from a guild banner or icon key (^B..^, ^I..^).
+    bool guild_mark = false;  // The tag_color came from a guild banner or icon key (^F..^, ^I..^).
   };
 
   struct RenderInfo {
