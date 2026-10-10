@@ -45,7 +45,8 @@ Summarizes notable changes to Zeal
   arrow again. `^F^` alone is still the flame. A picture that replaces a banner is now named `F<code>.png`
 
 * The "Export data on /camp" option now also saves your `#popflags` output to `<name>-PoPFlags.txt`
-  - Sends `#popflags all` once per camp and writes the lines the server answers with, plus the character and a timestamp
+  - Sends `#popflags` and `#popflags 1` to `5` once per camp (`all` is limited to server staff) and writes the lines the
+    server answers with, plus the character and a timestamp
   - Nothing is written if the server does not answer
   - Can also be run on demand with `/outputfile popflags [optional_filename]`
 

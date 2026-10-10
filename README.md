@@ -320,8 +320,9 @@ ___
   - **Description:**
     - `inventory` outputs information about your equipment, inventory bag slots, held item, and bank slots to a file.
     - `spellbook` outputs a list of all spell ids current scribed in your spellbook.
-    - `popflags` sends `#popflags all` to the server and saves the lines it answers with to `<name>-PoPFlags.txt` after
-      about 3 seconds (nothing is written if the server does not answer). Also done by the "Export data on /camp" option.
+    - `popflags` sends `#popflags` and `#popflags 1` to `5`, one a second, and saves the lines the server answers with
+      to `<name>-PoPFlags.txt` about 8 seconds later (nothing is written if the server does not answer). Also done by
+      the "Export data on /camp" option.
     - `raidlist` outputs a raid 'tick' with a list of players in the raid.
     - `format` sets the format of the export files (0 = default, 1 = new style with host tag)
 

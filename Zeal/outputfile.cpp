@@ -1,6 +1,8 @@
 #include "outputfile.h"
 
+#include <cctype>
 #include <fstream>
+#include <iterator>
 
 #include "callbacks.h"
 #include "commands.h"
@@ -442,12 +444,25 @@ void OutputFile::write_to_file(std::string data, std::string file_arg, std::stri
 }
 
 // The #popflags reply is plain server text and Zeal only sees it as incoming chat. So the export is a capture
-// window: send the command once, keep the server-coloured chat lines that arrive for a few seconds, then write
-// them. Nothing waits on the reply and the reply is not hidden from the player's chat.
-static constexpr const char *kPopFlagsCommand = "#popflags all";
-static constexpr int kPopFlagsCaptureMs = 3000;             // Window for the reply to arrive.
-static constexpr ULONGLONG kPopFlagsMinIntervalMs = 10000;  // Never ask the server more often than this.
+// window: send the commands, keep the server-coloured chat lines that arrive until a few seconds after the last
+// one, then write them. Nothing waits on the reply and the reply is not hidden from the player's chat.
+// "#popflags all" is limited to server staff, so a player gets the full picture as the overview plus each tier.
+static constexpr const char *kPopFlagsCommands[] = {"#popflags", "#popflags 1", "#popflags 2",
+                                                    "#popflags 3", "#popflags 4", "#popflags 5"};
+static constexpr int kPopFlagsSpacingMs = 1000;             // Gap between the commands, to stay gentle on the server.
+static constexpr int kPopFlagsCaptureMs = 3000;             // Window for the last reply to arrive.
+static constexpr ULONGLONG kPopFlagsMinIntervalMs = 15000;  // Never start a new request sooner than this.
 static constexpr size_t kPopFlagsMaxLines = 400;            // Safety cap on a runaway capture.
+
+// Drops a leading chat timestamp such as "[15:18:05] " so the file holds the server's text only.
+static std::string PopFlagsStripTimestamp(const std::string &msg) {
+  if (msg.size() < 3 || msg[0] != '[') return msg;
+  const size_t close = msg.find(']');
+  if (close == std::string::npos || close > 12) return msg;
+  for (size_t i = 1; i < close; ++i)
+    if (!isdigit(static_cast<unsigned char>(msg[i])) && msg[i] != ':') return msg;
+  return msg.substr((close + 1 < msg.size() && msg[close + 1] == ' ') ? close + 2 : close + 1);
+}
 
 void OutputFile::export_popflags(const std::vector<std::string> &args, bool verbose) {
   Zeal::GameStructures::Entity *self = Zeal::Game::get_self();
@@ -470,9 +485,20 @@ void OutputFile::export_popflags(const std::vector<std::string> &args, bool verb
   popflags_lines.clear();
   popflags_pending = true;
 
-  // Hide the local echo like the other # commands that Zeal sends. The reply itself is not suppressed.
-  Zeal::Game::do_say(true, kPopFlagsCommand);
-  ZealService::get_instance()->callbacks->AddDelayed([this]() { popflags_finish(); }, kPopFlagsCaptureMs);
+  // Hide the local echo like the other # commands that Zeal sends. The reply itself is not suppressed. Every
+  // delayed send is scheduled here, never from inside a delayed callback (AddDelayed must not be re-entered).
+  auto *callbacks = ZealService::get_instance()->callbacks.get();
+  const int count = static_cast<int>(std::size(kPopFlagsCommands));
+  Zeal::Game::do_say(true, kPopFlagsCommands[0]);
+  for (int i = 1; i < count; ++i) {
+    const char *command = kPopFlagsCommands[i];
+    callbacks->AddDelayed(
+        [this, command]() {
+          if (popflags_pending && Zeal::Game::is_in_game()) Zeal::Game::do_say(true, command);
+        },
+        i * kPopFlagsSpacingMs);
+  }
+  callbacks->AddDelayed([this]() { popflags_finish(); }, (count - 1) * kPopFlagsSpacingMs + kPopFlagsCaptureMs);
 }
 
 void OutputFile::popflags_capture(const std::string &msg, short channel) {
@@ -483,7 +509,7 @@ void OutputFile::popflags_capture(const std::string &msg, short channel) {
   // The camp's own messages arrive during the window and are not flags.
   if (msg.find("prepare your camp") != std::string::npos || msg.find("preparations to camp") != std::string::npos)
     return;
-  popflags_lines.push_back(msg);
+  popflags_lines.push_back(PopFlagsStripTimestamp(msg));
 }
 
 void OutputFile::popflags_finish() {
@@ -502,7 +528,7 @@ void OutputFile::popflags_finish() {
   std::string t = "\t";  // output spacer
   oss << "Character" << t << popflags_character << std::endl;
   oss << "Timestamp" << t << Zeal::Game::generateTimestamp() << std::endl;
-  oss << "Command" << t << kPopFlagsCommand << std::endl;
+  oss << "Command" << t << "#popflags, #popflags 1-5" << std::endl;
   oss << "---" << std::endl;
   for (const std::string &line : lines) oss << line << std::endl;
 
