@@ -1,12 +1,13 @@
 {
   "order": 11,
   "title": "Guild icons and banners, round two",
-  "pitch": "Banners that carry each guild's logo and name. Work in progress.",
-  "image": "guild-icon-refresh/burnouts-cigarette.png",
+  "pitch": "Every guild banner carries the guild's own logo, in a colour that stands out from the flag.",
+  "image": "guild-icon-refresh/banners-sheet.png",
   "bullets": [
-    "Logo parts coloured to contrast with each guild's flag",
-    "Burnouts: a lit rolled cigarette replaces the match",
-    "Placeholder until the branch is committed and built"
+    "Logo on the flag instead of a three-letter code",
+    "Logo colour checked for contrast against the flag (3:1)",
+    "Optional guild name under the logo where it fits",
+    "Burnouts: a lit rolled cigarette replaces the match"
   ],
   "try": "not in the test-all build yet (local draft branch, needs a build)",
   "status": "draft",
