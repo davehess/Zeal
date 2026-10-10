@@ -17,7 +17,8 @@
 // This is plain math with no DirectX dependency so the meshes can be checked and previewed off-client.
 namespace TagShapes {
 
-// Guilds with a banner (^B<code>^: a swallowtail flag in the guild's color carrying its logo, or its code when it has no drawing) and an
+// Guilds with a banner (^F<code>^, F for flag: a swallowtail flag in the guild's color carrying its logo, or its
+// code when it has no drawing) and an
 // icon (^I<code>^: the guild's own symbol).
 struct Guild {
   const char *code;      // Two or three uppercase letters.

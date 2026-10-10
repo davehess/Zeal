@@ -22,11 +22,14 @@ Summarizes notable changes to Zeal
 
 * Added a slow tag shape `^SLOW^`: an hourglass
 
-* Guild banners (`^B<code>^`) now carry the guild's logo (the same drawing as its `^I<code>^` icon) and its name
+* Guild banners (`^F<code>^`, F for flag) now carry the guild's logo (the same drawing as its `^I<code>^` icon) and its name
   instead of its three letters, the name split over lines above and below the logo where that lets it be bigger.
   The two longest names, Tranquility and Intervention, are split with a hyphen. The logo is drawn in the same
   colors as the guild's icon, with a thin dark or light rim where those colors would not stand out from the flag, and
   the name is near-black or near-white, whichever reads better on the flag. The Burnouts icon is now a lit rolled cigarette instead of a burning match
+
+* Guild banners use `^F<code>^` (F for flag), like `^FEUR^`; `^B<code>^` is no longer a banner key and is a blue
+  arrow again. `^F^` alone is still the flame
 
 
 ## [1.4.8] - 2026/10/01
