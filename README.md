@@ -487,8 +487,8 @@ ___
 
 - `/spellid`
   - **Arguments:** `on`, `off` (none toggles)
-  - **Description:** Adds a `Spell ID: <id>` line to spell info windows (spells, buffs, scrolls), for tools that
-    block or track buffs by id. Off by default.
+  - **Description:** Adds a `Spell ID: <id>` line to spell info windows (spell gems, spellbook, buffs), for tools
+    that block or track buffs by id. Off by default.
 
 - `/stopsong`
   - **Description:** Fixes a client bug so /stopsong doesn't desync from server with clickies.
