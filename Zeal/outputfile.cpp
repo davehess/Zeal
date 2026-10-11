@@ -505,12 +505,17 @@ void OutputFile::export_popflags(const std::vector<std::string> &args, bool verb
 }
 
 void OutputFile::popflags_capture(std::string &msg, short channel) {
-  if (!popflags_pending || msg.empty() || popflags_lines.size() >= kPopFlagsMaxLines) return;
+  if (!popflags_pending || msg.empty()) return;
   // The reply uses only these four server colours. Player chat, combat, spells and loot use the 0x100+ user colours
   // and NPC dialogue the quest-say colour, so none of those are taken.
   if (channel != CHATCOLOR_WHITE && channel != CHATCOLOR_LIME && channel != CHATCOLOR_YELLOW &&
-      channel != CHATCOLOR_RED)
+      channel != CHATCOLOR_RED) {
+    // The commands still come back as a say line ("[S] [Name]: #popflags 3" with abbreviated chat) although do_say
+    // hides the local echo, so drop those too. Not stored: they are our own commands, not flags.
+    if (msg.find("#popflags") != std::string::npos) msg.clear();
     return;
+  }
+  if (popflags_lines.size() >= kPopFlagsMaxLines) return;
   // The camp's own messages arrive during the window and are not flags.
   if (msg.find("prepare your camp") != std::string::npos || msg.find("preparations to camp") != std::string::npos)
     return;
