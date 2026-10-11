@@ -1,8 +1,11 @@
 #pragma once
 #include <Windows.h>
 
+#include <filesystem>
 #include <functional>
+#include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "bitmap_font.h"
@@ -12,6 +15,36 @@
 #include "zeal_settings.h"
 
 class NamePlate {
+ private:
+  // Tag persistence: tags survive zoning, a character switch, a device reset and a client crash.
+  // Live tags are mirrored into saved_tags (keyed by zone and spawn id) and to a per-character file,
+  // and restored onto an entity with the same zone, spawn id and name when it appears again.
+  // Players are kept apart in saved_player_tags, keyed by name alone: a name is unique on the server,
+  // while a player gets a new spawn id every time they zone in, so their tag follows them through
+  // zoning (theirs or yours), a camp and a death.
+  //
+  // Declared ahead of the settings on purpose: members are constructed in declaration order, and a
+  // ZealSetting's constructor runs its change callback, which for the font settings calls clean_ui().
+  // clean_ui() touches saved_tags, so it must already exist by then.
+  struct SavedTag {
+    std::string name;      // Stripped entity name when tagged; a reused spawn id with another name is not restored.
+    std::string tag_text;  // Without the trailing newline.
+    DWORD tag_color = 0;
+    long long last_seen = 0;  // time() the tag was last set or seen live, for expiry.
+    bool live_seen = false;   // Matched to a live entity since the last clean_ui() (or, for a player, since
+                              // they last left).
+  };
+
+  std::map<std::pair<int, int>, SavedTag> saved_tags;  // Keyed by {zone id, spawn id}.
+  std::map<std::string, SavedTag> saved_player_tags;   // Keyed by stripped player name, in any zone.
+  std::filesystem::path saved_tags_filename;           // The character file saved_tags was last loaded from.
+  bool saved_tags_dirty = false;
+  bool saved_tags_failed = false;        // An exception ended persistence for this session.
+  bool saved_tags_write_warned = false;  // The failed-write chat line has been shown.
+  ULONGLONG saved_tags_next_sync = 0;
+  ULONGLONG saved_tags_next_write = 0;  // Backoff after a failed write.
+  bool initialized = false;             // Set at the end of the constructor; clean_ui() does nothing before that.
+
  public:
   // The positive color indices must be kept in sync with the color options.
   enum class ColorIndex : int {
@@ -60,6 +93,7 @@ class NamePlate {
   ZealSetting<bool> setting_tag_default_arrow = {true, "Zeal", "NameplateTagDefaultArrow", false};
   ZealSetting<bool> setting_tag_alternate_symbols = {false, "Zeal", "NameplateTagAlternateSymbols", false};
   ZealSetting<std::string> setting_tag_channel = {"", "Zeal", "NameplateTagChannel", false};
+  ZealSetting<bool> setting_tag_persist = {true, "Zeal", "NameplateTagPersist", false};
 
   // Text settings.
   ZealSetting<bool> setting_hide_self = {false, "Zeal", "NameplateHideSelf", false};
@@ -158,6 +192,13 @@ class NamePlate {
   void synchronize_pretty_print() const;
   void check_raid_shownames();
   void set_shownames_value(int value, bool update_ui);
+
+  // Tag persistence (state is declared at the top of the class).
+  void sync_saved_tags();
+  void sync_saved_tags_impl();
+  void clear_saved_tags_in_zone();
+  void load_saved_tags(const std::filesystem::path &filename);
+  void write_saved_tags();
 
   void clean_ui();
   void render_ui();
