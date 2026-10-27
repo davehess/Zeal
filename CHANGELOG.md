@@ -3,6 +3,20 @@
 Summarizes notable changes to Zeal
 
 
+## [Unreleased]
+
+### New features
+
+* Tags are kept through zoning, a character switch, a device reset and a client crash
+  - Saved per zone and spawn id to `<character>_tags.txt`; a player's tag is kept by name
+  - `/tag persist <on | off>` (on by default)
+
+* Corpses (NPC and player) can be tagged. A corpse shows only tags set on it after the death
+
+* A received tag now applies only if the target name in it matches the mob with that spawn id, so
+  a tag sent from another zone no longer lands on an unrelated mob
+
+
 ## [1.4.8] - 2026/10/01
 
 ### New features
