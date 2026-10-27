@@ -1,0 +1,246 @@
+# Builds "Wolf Pack Zeal": the latest official upstream Zeal release plus the commits listed in
+# wolfpack/approved.txt, published as ONE rolling prerelease (tag wolfpack-beta) for Raid Mimic's
+# Wolf Pack channel.
+#
+# Must live on the default branch: scheduled workflows only run there.
+#
+# Each run works out a fingerprint (base release tag + approved shas). If the current wolfpack-beta
+# release already carries it, nothing is built. Otherwise the approved commits are cherry-picked onto the
+# base tag, built and published. A pick that conflicts, or is empty because upstream already shipped it,
+# fails the job and leaves the previous release untouched.
+#
+# The build command and zip contents are the upstream release workflow's (create_release.yml), with
+# zeal_build_version set to wolfpack-<run>-<short hash>, so /zeal version shows e.g. "1.4.8 (wolfpack-7-abc1234)".
+
+name: Build Wolf Pack Zeal
+
+on:
+  schedule:
+    - cron: '41 9 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'wolfpack/**'
+      - '.github/workflows/build-wolfpack.yml'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Rebuild even if nothing changed'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-wolfpack
+  cancel-in-progress: false
+
+env:
+  SOLUTION_FILE_PATH: ./Zeal.sln
+  RELEASE_TAG: wolfpack-beta
+  BUILD_BRANCH: wolfpack-beta-build
+  UPSTREAM: CoastalRedwood/Zeal
+
+jobs:
+  build:
+    name: Build and publish Wolf Pack Zeal
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find the base release and decide whether anything changed
+        id: check
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          BASE_TAG=$(gh api "repos/$UPSTREAM/releases/latest" --jq .tag_name)
+          if [ -z "$BASE_TAG" ]; then
+            echo "::error::Could not read the latest $UPSTREAM release."
+            exit 1
+          fi
+
+          # Approved commits: <full sha> <label>; full-line # comments and blank lines are skipped.
+          # (Not stripped inline: a label may contain a #.)
+          FP="$BASE_TAG"
+          : > "$RUNNER_TEMP/approved.list"
+          while read -r sha label; do
+            if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error file=wolfpack/approved.txt::'$sha' is not a full 40-character commit sha."
+              exit 1
+            fi
+            if ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+              echo "::error file=wolfpack/approved.txt::Commit $sha is not in this repository (branch deleted or rewritten?)."
+              exit 1
+            fi
+            printf '%s\t%s\n' "$sha" "${label:-(no label)}" >> "$RUNNER_TEMP/approved.list"
+            FP="$FP $sha"
+          done < <(tr -d '\r' < wolfpack/approved.txt | grep -Ev '^[[:space:]]*(#|$)' || true)
+
+          CURRENT=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq .body 2>/dev/null | tr -d '\r' || true)
+          BUILD=true
+          if [ "$FORCE" != "true" ] && printf '%s\n' "$CURRENT" | grep -qF "<!-- wolfpack-fingerprint: $FP -->"; then
+            BUILD=false
+          fi
+
+          {
+            echo "base_tag=$BASE_TAG"
+            echo "fingerprint=$FP"
+            echo "build=$BUILD"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Wolf Pack Zeal"
+            echo "- Base: official Zeal $BASE_TAG"
+            echo "- Included commits:"
+            if [ -s "$RUNNER_TEMP/approved.list" ]; then
+              while IFS=$'\t' read -r sha label; do echo "  - \`${sha:0:7}\` $label"; done < "$RUNNER_TEMP/approved.list"
+            else
+              echo "  - none"
+            fi
+            if [ "$BUILD" = "true" ]; then
+              echo "- Outcome: building (force=${FORCE:-false})"
+            else
+              echo "- Outcome: no change since the current $RELEASE_TAG release, nothing built"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cherry-pick the approved commits onto the base release
+        id: assemble
+        if: steps.check.outputs.build == 'true'
+        shell: bash
+        env:
+          BASE_TAG: ${{ steps.check.outputs.base_tag }}
+        run: |
+          git fetch --no-tags "https://github.com/$UPSTREAM.git" "refs/tags/$BASE_TAG"
+          git checkout -q -B "$BUILD_BRANCH" "FETCH_HEAD^{commit}"
+          while IFS=$'\t' read -r sha label; do
+            if git -c user.name="Wolf Pack build" -c user.email="wolfpack-build@users.noreply.github.com" \
+                 cherry-pick -x "$sha" < /dev/null; then
+              continue
+            fi
+            if [ -z "$(git ls-files -u)" ] && git diff --cached --quiet; then
+              MSG="Commit ${sha:0:7} ($label) is empty on top of $BASE_TAG: upstream already shipped it. Remove this line from wolfpack/approved.txt."
+            else
+              MSG="Commit ${sha:0:7} ($label) conflicts with $BASE_TAG. Rebase it onto that release, then update its sha in wolfpack/approved.txt (or remove the line)."
+            fi
+            git cherry-pick --abort || true
+            echo "::error title=Wolf Pack build stopped::$MSG The previous $RELEASE_TAG release is untouched."
+            echo "## Build failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "$MSG The previous $RELEASE_TAG release is untouched." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          done < "$RUNNER_TEMP/approved.list"
+          echo "short_hash=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Add msbuild to PATH
+        if: steps.check.outputs.build == 'true'
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build the Zeal solution
+        if: steps.check.outputs.build == 'true'
+        env:
+          ZEAL_BUILD_VERSION: wolfpack-${{ github.run_number }}-${{ steps.assemble.outputs.short_hash }}
+        run: |
+          msbuild /m /p:Configuration=Release /p:Platform=x86 /p:zeal_build_version=$env:ZEAL_BUILD_VERSION /p:LanguageStandard=stdcpp20 $env:SOLUTION_FILE_PATH /p:ExportHeader="" /p:ScanDependencies=""
+
+      - name: Write the readme, release notes and zip name
+        id: notes
+        if: steps.check.outputs.build == 'true'
+        shell: bash
+        env:
+          BASE_TAG: ${{ steps.check.outputs.base_tag }}
+          FINGERPRINT: ${{ steps.check.outputs.fingerprint }}
+          BUILD_LABEL: wolfpack-${{ github.run_number }}-${{ steps.assemble.outputs.short_hash }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          ZEAL_VERSION=$(grep '#define ZEAL_VERSION' Zeal/zeal.h | sed 's/^[^"]*"\([^"]*\)".*/\1/')
+          echo "zip=zeal_v${ZEAL_VERSION}-wolfpack.${RUN_NUMBER}.zip" >> "$GITHUB_OUTPUT"
+
+          if [ -s "$RUNNER_TEMP/approved.list" ]; then
+            while IFS=$'\t' read -r sha label; do echo "- \`${sha:0:7}\` $label"; done < "$RUNNER_TEMP/approved.list" > "$RUNNER_TEMP/included.md"
+          else
+            echo "- None: this build is the official release as it is." > "$RUNNER_TEMP/included.md"
+          fi
+
+          cat > WOLFPACK_README.md <<EOF
+          # Wolf Pack Zeal (unofficial build)
+
+          This is an unofficial build of Zeal made for the Wolf Pack guild on Project Quarm.
+          It is not an official Zeal release.
+
+          - Base: official Zeal $BASE_TAG (https://github.com/$UPSTREAM)
+          - Build: $BUILD_LABEL (shown by /zeal version)
+
+          ## Included changes
+
+          $(cat "$RUNNER_TEMP/included.md")
+
+          ## Problems
+
+          Report problems with this build to Wolf Pack, not to the Zeal maintainers.
+
+          ## Going back to official Zeal
+
+          Install the official release from https://github.com/$UPSTREAM/releases,
+          or pick Official in Raid Mimic > Settings > Zeal.
+          EOF
+
+          cat > "$RUNNER_TEMP/release-body.md" <<EOF
+          Unofficial Zeal build for the Wolf Pack guild on Project Quarm: official Zeal $BASE_TAG plus the changes below. Report problems to Wolf Pack, not to the Zeal maintainers. Zeal shows this build as "$BUILD_LABEL".
+
+          Included changes:
+
+          $(cat "$RUNNER_TEMP/included.md")
+
+          <!-- wolfpack-fingerprint: $FINGERPRINT -->
+          EOF
+
+      - name: Zip the build (same contents as an upstream release, plus the licence and Wolf Pack readme)
+        if: steps.check.outputs.build == 'true'
+        shell: pwsh
+        env:
+          ZIP_FILENAME: ${{ steps.notes.outputs.zip }}
+        run: |
+          7z a -tzip $env:ZIP_FILENAME ./Release/Zeal.asi ./Release/Zeal.pdb ./Zeal/uifiles README.md LICENSE WOLFPACK_README.md
+          7z rn $env:ZIP_FILENAME README.md Zeal_README.md
+
+      - name: Push the build commit and move the release tag to it
+        if: steps.check.outputs.build == 'true'
+        shell: bash
+        env:
+          SHA: ${{ steps.assemble.outputs.sha }}
+        run: |
+          git push -f origin "$BUILD_BRANCH"
+          git tag -f "$RELEASE_TAG" "$SHA"
+          git push -f origin "refs/tags/$RELEASE_TAG"
+
+      - name: Publish the rolling prerelease
+        if: steps.check.outputs.build == 'true'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ env.RELEASE_TAG }}
+          name: Wolf Pack Zeal beta (wolfpack-${{ github.run_number }}-${{ steps.assemble.outputs.short_hash }})
+          commit: ${{ steps.assemble.outputs.sha }}
+          prerelease: true
+          makeLatest: false
+          allowUpdates: true
+          removeArtifacts: true
+          artifacts: ${{ steps.notes.outputs.zip }}
+          artifactContentType: application/zip
+          artifactErrorsFailBuild: true
+          bodyFile: ${{ runner.temp }}/release-body.md
+
+      - name: Record the outcome
+        if: always() && steps.check.outputs.build == 'true'
+        shell: bash
+        env:
+          STATUS: ${{ job.status }}
+          BUILD_LABEL: wolfpack-${{ github.run_number }}-${{ steps.assemble.outputs.short_hash }}
+        run: |
+          echo "- Outcome: $STATUS ($BUILD_LABEL)" >> "$GITHUB_STEP_SUMMARY"

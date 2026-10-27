@@ -1,0 +1,15 @@
+# Wolf Pack Zeal: the commits added on top of the official Zeal release.
+# The base is always the latest official upstream release. Commits below are cherry-picked onto it, in order.
+# Add a line only for a commit the guild has tested. Format: <full 40-character commit sha> <short label>
+# Approval is pinned to the sha, so a later push to a branch never ships by itself.
+# Remove a line once upstream releases that change (the build fails and says so when a pick turns out empty).
+# Lines starting with # are comments. The label is free text (it may contain #).
+
+# branch pr/popflags-export
+d36a3367e05261b406f939de295c680313d4eb4b popflags: save #popflags output on /camp (upstream PR 253)
+# branch pr/pipedelay-print
+488ec48604d56003c6166c31b7b92284ae1f6b3b /pipedelay prints its value (upstream PR 254)
+# branch fix/tag-name-check
+342694bc805df4c1524d3d2d4d777d719add4f04 tags: received tag must match the mob's name
+# branch fix/tag-persist-corpses
+8bb72be7a59fe30c14468294a9d853720a4ae592 tags: optional persistence (default off) + corpse tagging
