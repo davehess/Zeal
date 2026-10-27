@@ -33,6 +33,7 @@ class NamePlate {
     long long last_seen = 0;  // time() the tag was last set or seen live, for expiry.
     bool live_seen = false;   // Matched to a live entity since the last clean_ui() (or, for a player, since
                               // they last left).
+    bool guild_mark = false;  // NamePlateInfo::guild_mark, so a restored guild mark still obeys /tag guildmarks.
   };
 
   std::map<std::pair<int, int>, SavedTag> saved_tags;  // Keyed by {zone id, spawn id}.
