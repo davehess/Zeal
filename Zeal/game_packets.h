@@ -26,7 +26,12 @@ enum opcodes {
   RequestClientZoneChange = 0x414d,
   RaidUpdate = 0x4260,
   ItemLinkResponse = 0x4264,
+  RaidInvite = 0x425f,  // Client request opcode for all raid commands (OP_RaidInvite in EQMacEmu).
 };
+
+// Values of RaidGeneral_Struct::action (EQMacEmu zone/raids.h).
+constexpr UINT32 kRaidCommandChangeRaidLeader = 20;
+
 
 struct Animation_Struct {
   /*00*/ UINT16 spawnid;
@@ -170,12 +175,15 @@ struct Illusion_Struct {
   /*020*/
 };
 
+// Also the OP_RaidInvite payload (EQMacEmu common/eq_packet_structs.h): the server reads a new leader's name
+// from leader_name.
 struct RaidGeneral_Struct {
   /*00*/ INT32 action;          // RaidCommandRemoveMember = 1, RaidCommandSendDisband = 10
   /*04*/ char player_name[64];  // should both be the player's name
   /*68*/ char leader_name[64];
   /*132*/ UINT32 parameter;
 };
+static_assert(sizeof(RaidGeneral_Struct) == 136, "RaidGeneral_Struct must match the 136 byte server struct");
 
 struct Stamina_Struct {
   /*00*/ INT16 food;    // clamped to 0 - 32000

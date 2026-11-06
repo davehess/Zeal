@@ -1,11 +1,13 @@
 #include "chat.h"
 
 #include <algorithm>
+#include <cctype>
 #include <format>
 #include <iostream>
 #include <map>
 #include <regex>
 #include <set>
+#include <string_view>
 #include <unordered_set>
 
 #include "binds.h"
@@ -21,6 +23,7 @@
 #include "hook_wrapper.h"
 #include "labels.h"
 #include "memory.h"
+#include "named_pipe.h"
 #include "string_util.h"
 #include "zeal.h"
 
@@ -38,7 +41,6 @@ std::map<std::string, std::string> channelPrefixes = {
     {"raid", "R"},              // Raid
 };
 
-std::string autoInvitePassword;  // Non-persistent
 std::string playerRolling;
 
 std::string ReadFromClipboard() {
@@ -785,25 +787,143 @@ void Chat::DoPercentReplacements(std::string &str_data) {
   for (auto &fn : percent_replacements) fn(str_data);
 }
 
-// Returns a player name if the tell message matches the AutoInvitePassword
-std::string GetAutoRaidInviteName(const std::string &data) {
-  // Regex string that will match normal or abbreviated chat
-  std::string autoInviteMatch_string =
-      std::format(R"((?:\[.*\] ?)*(?:(\w+) tells you, '{0}'|\[Fr\] \[(\w+)\]: {0}))", autoInvitePassword);
-  std::regex autoInviteMatch_pattern(autoInviteMatch_string);
-  std::smatch match;
+// True if the text is empty or only bracketed groups such as "[12:03] " or "[Fr] " (no nesting).
+static bool IsBracketPrefix(std::string_view p) {
+  size_t i = 0;
+  while (i < p.size()) {
+    if (p[i] != '[') return false;
+    const size_t close = p.find(']', i);
+    if (close == std::string_view::npos) return false;
+    if (p.find('[', i + 1) < close) return false;
+    i = close + 1;
+    if (i < p.size() && p[i] == ' ') ++i;
+  }
+  return true;
+}
 
-  if (std::regex_match(data, match, autoInviteMatch_pattern)) {
-    if (match[1].matched)
-      // Return name for normal formatted messages
-      return match[1].str();
-    else if (match[2].matched)
-      // Return name for abbreviated chat messages
-      return match[2].str();
+// Splits a received tell line into the single-word sender name and the exact message text. Handles the normal
+// "Name tells you, 'text'" form and the abbreviated "[Fr] [Name]: text" form, each optionally preceded by
+// bracketed prefixes such as a timestamp. Plain string handling only: the text is never treated as a pattern.
+static bool ParseTell(const std::string &data, std::string &sender, std::string &text) {
+  auto is_name_char = [](unsigned char c) { return std::isalnum(c) || c == '_'; };
+  static constexpr std::string_view kTellsYou = " tells you, '";
+  static constexpr std::string_view kAbbreviated = "[Fr] [";
+
+  size_t pos = data.find(kTellsYou);
+  if (pos != std::string::npos && pos > 0 && data.size() > pos + kTellsYou.size() && data.back() == '\'') {
+    size_t name_start = pos;
+    while (name_start > 0 && is_name_char(data[name_start - 1])) --name_start;
+    if (name_start < pos && IsBracketPrefix(std::string_view(data).substr(0, name_start))) {
+      sender = data.substr(name_start, pos - name_start);
+      text = data.substr(pos + kTellsYou.size(), data.size() - pos - kTellsYou.size() - 1);
+      return true;
+    }
   }
 
-  // Always return a blank name if none was found
-  return "";
+  pos = data.find(kAbbreviated);
+  if (pos != std::string::npos && IsBracketPrefix(std::string_view(data).substr(0, pos))) {
+    const size_t name_start = pos + kAbbreviated.size();
+    const size_t name_end = data.find("]: ", name_start);
+    if (name_end != std::string::npos && name_end > name_start &&
+        std::all_of(data.begin() + name_start, data.begin() + name_end,
+                    [&](char c) { return is_name_char(static_cast<unsigned char>(c)); })) {
+      sender = data.substr(name_start, name_end - name_start);
+      text = data.substr(name_end + 3);
+      return true;
+    }
+  }
+  return false;
+}
+
+// Returns the sender's name if the tell's whole message is exactly the password (case-sensitive plain compare),
+// else a blank name. A blank password never matches.
+static std::string GetTellSenderIfPassword(const std::string &data, const std::string &password) {
+  std::string sender, text;
+  if (password.empty() || !ParseTell(data, sender, text) || text != password) return "";
+  return sender;
+}
+
+// Shows only the first character of a password (for chat and status lines).
+static std::string MaskPassword(const std::string &password) {
+  if (password.empty()) return "";
+  return password.substr(0, 1) + std::string(password.size() - 1, '*');
+}
+
+// Sends a one-line custom notice on the named pipe (the same {"text": ...} custom message that /pipe sends).
+static void PipeNotice(const std::string &text) {
+  ZealService *zeal = ZealService::get_instance();
+  if (!zeal || !zeal->pipe) return;
+  nlohmann::json data = {{"text", text}};
+  zeal->pipe->write(data.dump(), pipe_data_type::custom);
+}
+
+void Chat::NotifyAutoRaidInvite(const std::string &password) {
+  PipeNotice(password.empty() ? "ARI clear" : "ARI set " + password);
+}
+
+// Note: the ARL password is client-only and must never be sent out. Only on/off goes on the pipe.
+void Chat::NotifyAutoRaidLead(const std::string &password) { PipeNotice(password.empty() ? "ARL off" : "ARL on"); }
+
+// Returns the raid's own spelling of the name if it is a member of the current raid, else nullptr.
+static const char *FindRaidMemberName(const std::string &name) {
+  const auto *raid_info = Zeal::Game::RaidInfo;
+  if (name.empty() || !raid_info || !raid_info->is_in_raid()) return nullptr;
+  for (const auto &member : raid_info->MemberList)
+    if (member.Name[0] && _stricmp(member.Name, name.c_str()) == 0) return member.Name;
+  return nullptr;
+}
+
+static bool IsSelfRaidLeader() {
+  const auto *raid_info = Zeal::Game::RaidInfo;
+  return raid_info && raid_info->is_in_raid() && raid_info->IsLeader == 1;
+}
+
+// Issues the same make-leader request the raid window sends (OP_RaidInvite, action 20). The server only honors
+// it from the current raid leader and takes the new leader's name from the leader_name field.
+// Returns false (sends nothing) unless self is the raid leader and the name is another raid member.
+static bool SendMakeRaidLeader(const std::string &name) {
+  const char *member_name = FindRaidMemberName(name);
+  const auto *self = Zeal::Game::get_self();
+  if (!member_name || !self || !IsSelfRaidLeader() || _stricmp(member_name, self->Name) == 0) return false;
+
+  Zeal::Packets::RaidGeneral_Struct packet = {};
+  packet.action = Zeal::Packets::kRaidCommandChangeRaidLeader;
+  strncpy_s(packet.player_name, sizeof(packet.player_name), member_name, _TRUNCATE);
+  strncpy_s(packet.leader_name, sizeof(packet.leader_name), member_name, _TRUNCATE);
+  Zeal::Game::send_message(Zeal::Packets::RaidInvite, reinterpret_cast<int *>(&packet), sizeof(packet), 0);
+  return true;
+}
+
+// Handles a received tell for /autoraidlead. Replaces msg and channel when the tell was for this feature.
+// Every failed condition is a local-only no-op (nothing is sent to the server).
+static void HandleAutoRaidLeadTell(const std::string &password, std::string &msg, short &channel) {
+  std::string sender, text;
+  if (password.empty() || !ParseTell(msg, sender, text)) return;
+
+  if (text == password) {
+    // Never leave the password in the chat window.
+    channel = CHATCOLOR_YELLOW;
+    static ULONGLONG last_handoff_ms = 0;
+    static bool have_handoff = false;
+    if (!IsSelfRaidLeader()) {
+      msg = "ARL: not raid leader, ignored";
+    } else if (!FindRaidMemberName(sender)) {
+      msg = "ARL: " + sender + " is not in this raid, ignored";
+    } else if (have_handoff && GetTickCount64() - last_handoff_ms < 10000) {
+      msg = "ARL: rate limited, ignored";
+    } else if (SendMakeRaidLeader(sender)) {
+      have_handoff = true;
+      last_handoff_ms = GetTickCount64();
+      channel = CHATCOLOR_DEFAULT;
+      msg = "ARL: handing raid lead to " + sender + ".";
+    } else {
+      msg = "ARL: raid lead not handed over, ignored";
+    }
+  } else if (_stricmp(text.c_str(), "raidlead") == 0 && IsSelfRaidLeader() && FindRaidMemberName(sender)) {
+    // Fallback with no password: the leader decides.
+    channel = CHATCOLOR_YELLOW;
+    msg = sender + " asks for raid lead - /arl give " + sender + " to hand it over";
+  }
 }
 
 // ASCII case-insensitive char compare
@@ -982,8 +1102,8 @@ void Chat::AddOutputText(Zeal::GameUI::ChatWnd *wnd, std::string &msg, short &ch
     }
   }
 
-  if (channel == USERCOLOR_TELL && !autoInvitePassword.empty()) {
-    std::string name = GetAutoRaidInviteName(msg);
+  if (channel == USERCOLOR_TELL && !AutoRaidInvitePassword.get().empty()) {
+    std::string name = GetTellSenderIfPassword(msg, AutoRaidInvitePassword.get());
     if (!name.empty()) {
       const bool bEnableRaidLeaderCheck = false;  // Maybe make this an option someday if someone cares.
       const Zeal::GameStructures::RaidInfo *raid_info = Zeal::Game::RaidInfo;
@@ -997,6 +1117,9 @@ void Chat::AddOutputText(Zeal::GameUI::ChatWnd *wnd, std::string &msg, short &ch
       }
     }
   }
+
+  if (channel == USERCOLOR_TELL && !AutoRaidLeadPassword.get().empty())
+    HandleAutoRaidLeadTell(AutoRaidLeadPassword.get(), msg, channel);
 
   if (UseClassChatColors.get() && !msg.empty()) {
     msg = add_class_colors(msg, channel);
@@ -1118,16 +1241,64 @@ Chat::Chat(ZealService *zeal) {
                       // false if you want to just add features to an existing cmd
       });
   zeal->commands_hook->Add(
-      "/autoraidinvite", {"/ari"}, "Will raid-invite anyone who sends you a tell with a matching password.",
+      "/autoraidinvite", {"/ari"},
+      "Will raid-invite anyone who sends you a tell with a matching password (saved per character).",
       [this](std::vector<std::string> &args) {
-        if (args.size() == 2) {
-          if (args[1] == "off")
-            autoInvitePassword.clear();
-          else
-            autoInvitePassword = args[1];
-          Zeal::Game::print_chat("Auto-Raid invite %s.", autoInvitePassword.empty() ? "disabled" : "enabled");
+        constexpr size_t kMaxPasswordLength = 64;
+        if (args.size() == 2 && (args[1] == "clear" || args[1] == "off")) {
+          AutoRaidInvitePassword.set("");
+          Zeal::Game::print_chat("Auto-Raid invite disabled.");
+        } else if (args.size() == 2 && args[1].length() > kMaxPasswordLength) {
+          Zeal::Game::print_chat("Auto-Raid invite password must be %d characters or fewer.", (int)kMaxPasswordLength);
+        } else if (args.size() == 2) {
+          AutoRaidInvitePassword.set(args[1]);
+          Zeal::Game::print_chat("Auto-Raid invite enabled (password %s).",
+                                 MaskPassword(AutoRaidInvitePassword.get()).c_str());
         } else {
-          Zeal::Game::print_chat("Use \"/autoraidinvite <password>\" to enable or \"/autoraidinvite off\" to disable.");
+          const std::string &password = AutoRaidInvitePassword.get();
+          if (password.empty())
+            Zeal::Game::print_chat("Auto-Raid invite is disabled.");
+          else
+            Zeal::Game::print_chat("Auto-Raid invite is enabled (password %s).", MaskPassword(password).c_str());
+          Zeal::Game::print_chat("Use \"/autoraidinvite <password>\" to enable or \"/autoraidinvite clear\" to disable.");
+          NotifyAutoRaidInvite(password);  // Lets a pipe client that connected after login catch up.
+        }
+        return true;
+      });
+  zeal->commands_hook->Add(
+      "/autoraidlead", {"/arl"},
+      "Hands raid leadership to a raid member who sends you a tell with a matching password (saved per character).",
+      [this](std::vector<std::string> &args) {
+        constexpr size_t kMaxPasswordLength = 64;
+        const std::string &password = AutoRaidLeadPassword.get();
+        if (args.size() == 2 && (args[1] == "clear" || args[1] == "off")) {
+          AutoRaidLeadPassword.set("");
+          Zeal::Game::print_chat("Auto-Raid lead disabled.");
+        } else if (args.size() == 3 && args[1] == "give") {
+          if (SendMakeRaidLeader(args[2]))
+            Zeal::Game::print_chat("Handing raid lead to %s.", FindRaidMemberName(args[2]));
+          else if (!IsSelfRaidLeader())
+            Zeal::Game::print_chat("You are not the raid leader.");
+          else
+            Zeal::Game::print_chat("%s is not another member of your raid.", args[2].c_str());
+        } else if (args.size() == 2 && args[1] == "give") {
+          Zeal::Game::print_chat("Use \"/autoraidlead give <name>\" to hand raid lead to a raid member.");
+        } else if (args.size() == 2 && args[1].length() > kMaxPasswordLength) {
+          Zeal::Game::print_chat("Auto-Raid lead password must be %d characters or fewer.", (int)kMaxPasswordLength);
+        } else if (args.size() == 2) {
+          AutoRaidLeadPassword.set(args[1]);
+          Zeal::Game::print_chat("Auto-Raid lead enabled (password %s).",
+                                 MaskPassword(AutoRaidLeadPassword.get()).c_str());
+        } else {
+          if (password.empty())
+            Zeal::Game::print_chat("Auto-Raid lead is disabled.");
+          else
+            Zeal::Game::print_chat("Auto-Raid lead is enabled (password %s). You are %sthe raid leader.",
+                                   MaskPassword(password).c_str(), IsSelfRaidLeader() ? "" : "not ");
+          Zeal::Game::print_chat(
+              "Use \"/autoraidlead <password>\" to enable, \"/autoraidlead clear\" to disable, or "
+              "\"/autoraidlead give <name>\" to hand over raid lead.");
+          NotifyAutoRaidLead(password);  // Lets a pipe client that connected after login catch up.
         }
         return true;
       });
