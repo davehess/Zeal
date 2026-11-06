@@ -4,6 +4,7 @@
 
 #include "callbacks.h"
 #include "commands.h"
+#include "equip_item.h"  // click-from-inventory setting: bag steps and name matches need it
 #include "game_functions.h"
 #include "hook_wrapper.h"
 #include "string_util.h"
@@ -19,7 +20,7 @@
 // - Command line behavior and messages:
 //   - Bard class only
 //   - # of songs limit <= 5
-//   - Only ints as parameters
+//   - Only ints or bard song click items as parameters
 //   - Zero parameter melody ends melody
 //   - Start is prevented when not standing
 //   - New /melody without a /stopsong transitions cleanly after current song
@@ -44,7 +45,81 @@ constexpr unsigned int USE_ITEM_QUEUE_TIMEOUT =
 
 enum UseItemState : int { Idle = 0, CastRequested, CastStarted };
 
-bool Melody::start(const std::vector<int> &new_songs, bool resume) {
+// Parses the token argument to configure the melody step object.
+MelodyStep::MelodyStep(const std::string &token) {
+  key = token;
+
+  // The MelodyStep() initializes as invalid. Try to parse the token to make it valid.
+  // First check the standard numeric gem format of 1 to 8.
+  int number = -1;
+  if (Zeal::String::tryParse(token, &number, true)) {
+    if (number > 0 && number <= GAME_NUM_SPELL_GEMS)
+      gem = number - 1;  // Convert from base 1 UI to base 0 indexing.
+    else
+      Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Parsing error: Invalid gem # %d, use 1-8", number);
+    return;
+  }
+
+  // The non-gem format should be either #.# or the start of an item name.
+  // Check for the #.# item slot format. Item names do not have a '.' in them, so filter by that.
+  const size_t dot = token.find('.');
+  if (dot != std::string::npos) {
+    int bag = 0, bagslot = 0;
+    if (Zeal::String::tryParse(token.substr(0, dot), &bag, true) &&
+        Zeal::String::tryParse(token.substr(dot + 1), &bagslot, true) && bag >= 0 &&
+        bag <= GAME_NUM_INVENTORY_PACK_SLOTS) {
+      if (bag == 0) {  // Equipped slots.
+        if (bagslot >= 0 && bagslot <= GAME_PACKS_SLOTS_END && bagslot != GAME_EQUIPMENT_SLOTS_END) {
+          if (bagslot < GAME_EQUIPMENT_SLOTS_END)
+            bagslot += GAME_EQUIPMENT_SLOTS_START;  // Copy /useitem's translation.
+          item_slot_id = bagslot;
+          return;
+        }
+      } else if (bagslot >= 1 && bagslot <= GAME_NUM_CONTAINER_SLOTS) {
+        item_slot_id = GAME_CONTAINER_SLOTS_START + (bag - 1) * GAME_NUM_CONTAINER_SLOTS + bagslot - 1;
+        return;
+      }
+    }
+    Zeal::Game::print_chat(
+        USERCOLOR_SPELL_FAILURE,
+        "Invalid inventory location %s, use <#.#> like 0.10 for Ranged (equipment slot 10) or 2.3 for bag 2, slot 3",
+        key.c_str());
+    return;
+  }
+
+  // That failed so try the name search for the token.
+  std::string name = token;
+  std::replace(name.begin(), name.end(), '_', ' ');
+  item_slot_id = Zeal::Game::find_use_item_by_name(name, true);  // Returns -1 if fails to match.
+  if (item_slot_id < 0)
+    Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Failed to find a usable clickable item that matches %s",
+                           key.c_str());
+}
+
+// Returns true if this step points to an inventory slot with an item that has a usable bard song clicky effect.
+bool MelodyStep::is_item_valid(bool do_print) const {
+  if (!is_item()) return false;
+  bool is_equipped = (GAME_EQUIPMENT_SLOTS_START <= item_slot_id && item_slot_id <= GAME_EQUIPMENT_SLOTS_END);
+  const auto *item = Zeal::Game::get_inventory_item_from_global_slot_id(item_slot_id, false);
+  if (!item || !Zeal::Game::is_valid_item_to_use(item, is_equipped, false)) {
+    if (do_print)
+      Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Melody Error: item %s is not a usable clickable item",
+                             key.c_str());
+    return false;
+  }
+
+  // If it got to here, it should have a valid spell index so ensure it is a bard-song spell.
+  const auto *spell_mgr = Zeal::Game::get_spell_mgr();
+  const auto *spell = spell_mgr ? spell_mgr->Spells[item->Common.SpellIdEx] : nullptr;
+  if (spell && spell->IsBardSong()) return true;
+
+  if (do_print)
+    Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Melody Error: item %s does not have a clickable bard song effect",
+                           key.c_str());
+  return false;
+}
+
+bool Melody::start(const std::vector<MelodyStep> &new_songs, bool resume) {
   if (!Zeal::Game::is_in_game()) return false;
 
   Zeal::GameStructures::GAMECHARINFO *char_info = Zeal::Game::get_char_info();
@@ -59,9 +134,20 @@ bool Melody::start(const std::vector<int> &new_songs, bool resume) {
     return false;
   }
 
-  // confirm all gem indices in new_songs are valid indices with memorized spells.
-  std::vector<int> valid_songs;  // Valid, non-empty gem indices.
-  for (const int &gem_index : new_songs) {
+  // Ensure all steps either have valid memorized songs in the gem slots or valid items in the item_slot_id.
+  // An invalid step is skipped with a complaint.
+  std::vector<MelodyStep> valid_songs;
+  for (const MelodyStep &step : new_songs) {
+    if (step.is_item()) {
+      if (!step.is_item_valid()) {
+        Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Error: skipping %s (not a valid bard song item)",
+                               step.key.c_str());
+        continue;
+      }
+      valid_songs.push_back(step);
+      continue;
+    }
+    const int gem_index = step.gem;
     if (gem_index < 0 || gem_index >= GAME_NUM_SPELL_GEMS) {
       Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Error: Invalid spell gem %i", gem_index + 1);
       return false;
@@ -70,7 +156,7 @@ bool Melody::start(const std::vector<int> &new_songs, bool resume) {
     if (char_info->MemorizedSpell[gem_index] == -1)
       Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Error: skipping empty spell gem %i", gem_index + 1);
     else
-      valid_songs.push_back(gem_index);
+      valid_songs.push_back(step);
   }
 
   if (valid_songs.empty() && !new_songs.empty()) {
@@ -94,7 +180,7 @@ bool Melody::start(const std::vector<int> &new_songs, bool resume) {
   retry_spell_id = kInvalidSpellId;
   deferred_spell_id = kInvalidSpellId;
   use_item_index = -1;
-  use_item_ack_state = UseItemState::Idle;
+  // Do not reset use_item_ack_state in case this is an aligned melody re-start.
   if (is_active) Zeal::Game::print_chat(USERCOLOR_SPELLS, "You begin playing a melody.");
   return true;
 }
@@ -105,7 +191,7 @@ void Melody::resume() {
   start(songs, true);
 }
 
-void Melody::end(bool do_print) {
+void Melody::end(bool do_print, bool full_stop) {
   if (is_active) {
     // songs is left alone and and current_index is rewound (if needed) to before the interrupted song.
     if (casting_melody_spell_id != kInvalidSpellId) {
@@ -114,13 +200,20 @@ void Melody::end(bool do_print) {
         current_index = songs.size() - 1;
       }
     }
+
+    if (is_verbose)
+      Zeal::Game::print_chat("Melody end: spell ID: %d, state: %d", casting_melody_spell_id, use_item_ack_state);
+
     is_active = false;
     retry_count = 0;
     casting_melody_spell_id = kInvalidSpellId;
     retry_spell_id = kInvalidSpellId;
     deferred_spell_id = kInvalidSpellId;
     use_item_index = -1;
-    use_item_ack_state = UseItemState::Idle;
+
+    // Do not reset the use_item_ack_state (could be in the middle of a clicky cast) unless a full stop.
+    if (full_stop) use_item_ack_state = UseItemState::Idle;
+
     if (do_print) Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Your melody has ended.");
   }
 }
@@ -135,18 +228,29 @@ bool Melody::use_item(int item_index) {
 
 void Melody::handle_stop_cast_callback(BYTE reason, WORD spell_id) {
   // Terminate melody on stop except for missed note (part of reason == 3) rewind attempts.
+  // Server SendSpellBarEnable() calls generate OP_ManaChange packets with reason = 3.
+  // This is called by the server's CastedSpellFinished() for non-bard song clickies and by
+  // InterruptSpell() if it wasn't a client triggered bard song stop.
   if (reason != 3 || !is_active) {
     end(true);
     return;
   }
 
-  // Support rewinding to the interrupted last song (primarily for missed notes).
+  // Support rewinding to the interrupted last song (primarily for missed notes, so not items).
   // Note that reason code == 3 is shared by missed notes as well as other failures (such as the spell
   // is not allowed in the zone), so we use a retry_count to limit the spammy loop that is
   // difficult to click off with UI spell gems (/stopsong, /melody still work fine). The modulo
   // check skips the rewind so it advances to the next song but then allows that song to retry.
-  if (casting_melody_spell_id == spell_id && (++retry_count % RETRY_COUNT_REWIND_LIMIT))
-    retry_spell_id = casting_melody_spell_id;
+  bool is_rewindable_cast = (casting_melody_spell_id == spell_id) && (use_item_ack_state == UseItemState::Idle);
+  if (is_rewindable_cast && (++retry_count % RETRY_COUNT_REWIND_LIMIT)) retry_spell_id = casting_melody_spell_id;
+
+  if (is_verbose)
+    Zeal::Game::print_chat("Melody stop_cast: %d vs %d, state: %d", spell_id, casting_melody_spell_id,
+                           use_item_ack_state);
+
+  if (spell_id == casting_melody_spell_id)
+    use_item_ack_state = UseItemState::Idle;  // Normal clicky cast finished if it wasn't idle.
+
   casting_melody_spell_id = kInvalidSpellId;
 }
 
@@ -210,10 +314,6 @@ void Melody::tick() {
     return;
   }
 
-  // Use timestamps to add minimum delay after casting ends and detect excessive retries.
-  static ULONGLONG casting_visible_timestamp = GetTickCount64();
-  static ULONGLONG start_of_cast_timestamp = casting_visible_timestamp;
-
   ULONGLONG current_timestamp = GetTickCount64();
 
   // Pause updates from start of zoning until a small delay after entering to let things stabilize.
@@ -226,9 +326,14 @@ void Melody::tick() {
     // reset retry_count if the song cast window has been visible for > 1 second.
     if ((casting_visible_timestamp - start_of_cast_timestamp) > 1000) retry_count = 0;
     return;
-  } else if (use_item_ack_state == UseItemState::CastRequested) {  // Block until server acknowledges.
-    if ((current_timestamp - start_of_cast_timestamp) < 1000) return;
-    Zeal::Game::print_chat("Melody use item start sync ack failure");
+  } else if (use_item_ack_state == UseItemState::CastRequested) {
+    // Wait until server acknowledges the use item cast request with an OP_BeginCast packet.
+    if ((current_timestamp - start_of_cast_timestamp) < 750) return;  // Allow 750s of response lag.
+    Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Melody: Timeout waiting for the server to send item begin cast");
+  } else if (use_item_ack_state == UseItemState::CastStarted) {
+    // Wait until server acknowledges the end of cast with the stop for normal or action for bard songs.
+    if ((current_timestamp - casting_visible_timestamp) < 750) return;  // Allow 750s of response lag.
+    Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Melody: Timeout waiting for the server to send item end cast");
   }
 
   // Either casting finished normally or the retry logic has already kicked in,
@@ -238,30 +343,39 @@ void Melody::tick() {
   casting_melody_spell_id = kInvalidSpellId;
 
   // Notes on client / server handshaking:
-  // (1) Bard song casts:
+  // (1) Bard song gem casts:
   // A call to CastSpell() with a gem slot (not an item click) immediately sets both
-  // ActorInfo->CastingSpellId and ->CastingSpellGemNumber to valid values. The server
-  // receives the cast opcode and then after the cast timer sends an OP_MemorizeSpell
-  // in Mob::CastedSpellFinished to update the gem bar state which sets the
-  // CastingSpellGemNumber to 0xff. This provides a server ack that the casting timer
-  // has expired and it is now in steady state bard song (so a new cast can start).
-  // (2) Item clickies with non-bard songs:
-  // Item clickies work differently. For standard use_item clickies, the CastingSpellId
-  // is not set until an OP_BeginCast is received and the CastingSpellGemNumber is never
-  // updated from the zero value set in stop casting. The item click cast does set
+  // ActorInfo->CastingSpellId and ->CastingSpellGemNumber to valid values which makes
+  // the casting bar visible. The server receives the cast opcode and then after the
+  // cast timer sends an OP_MemorizeSpell in Mob::CastedSpellFinished to update the
+  // gem bar state which sets the CastingSpellGemNumber to 0xff. This provides a server
+  // ack that the casting timer has expired and it is now in steady state bard song
+  // (so a new melody cast can start).
+  // (2) Item clickies with non-bard songs (normal clickies):
+  // Item clickies work differently. For normal use_item clickies with cast times, the
+  // CastingSpellId is not set until an OP_BeginCast is received and the CastingSpellGemNumber
+  // is never updated from the zero value set in stop casting. The item click cast does set
   // the CastingSpellCastTime to 0 and the FizzleTimer to current time + 10 sec. The
   // OP_BeginCast sets the CastingSpellId, CastingTimeout, and CastingSpellCastTime
-  // which triggers the visible casting bar. For a normal clicky, the server sends an
+  // which triggers the visible casting bar. When casting finishes, the server sends an
   // OP_ManaChange that calls StopSpellCast() which sets CastingSpellId to kInvalidSpell,
-  // CastingSpellGemNumber to zero, and CastingTimeout to 0.
-  // (3) Item clickies with bard songs with non-zero cast times:
-  // These are similar to normal clickies however the OP_ManaChange message is not sent
-  // so we are stuck relying on a fixed MELODY_WAIT_USE_ITEM_TIMEOUT to be long enough
-  // that the server will be finished and ready for the next melody start of cast.
-  // (4) Item clickies with bard songs with zero cast times (e.g. Breath of Harmony)
-  // These basically complete immediately so just skip all handshaking and go to idle.
+  // CastingSpellGemNumber to zero, and CastingTimeout to 0. Normal insta-clickies skip
+  // the OP_BeginCast / visible casting bar completely and just receive the StopSpellCast()
+  // when the sequence is complete and ready to cast the next song.
+  // (3) Item clickies with bard songs with cast times:
+  // These start similar to normal clickies however they really are bard song casts (so
+  // the cast is interruptible) however the server never directly sends back any
+  // message that casting is finished. There is no OP_MemorizeSpell since the gem #
+  // isn't valid and no OP_ManaChange message since it is a bard song. The visible casting
+  // bar works for most of the cast time but there can still be drift between the client
+  // and server, so in order to get a positive handshake we use the OP_Action packet from
+  // when the spell hits to signal casting is truly finished and Melody can advance.
+  // (4) Item clickies with insta-cast bard songs:
+  // These are the simplest since there is no server handshaking and no server/client
+  // state to get out of sync, so Melody just sends the item cast request and moves on
+  // to the next song step.
 
-  // The timeout is for debug reporting and recovery if something goes wrong.
+  // The timeouts are for debug reporting and recovery if something goes wrong.
   bool casting_active = self->ActorInfo->CastingSpellId != kInvalidSpellId;
   bool server_ack_cast = (self->ActorInfo->CastingSpellGemNumber == 0xff);
   if (casting_active && !server_ack_cast) {
@@ -271,7 +385,7 @@ void Melody::tick() {
     if (!timed_out)
       return;  // Wait for the ack.
     else if (!use_item_active) {
-      Zeal::Game::print_chat("Melody: ack time out error, trying to restart");
+      Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Melody: ack time out error, trying to restart");
       stop_current_cast();  // Something is out of sync. Abort current casting.
     }
   }
@@ -282,23 +396,10 @@ void Melody::tick() {
 
   // Execute a pending use_item() call here
   use_item_ack_state = UseItemState::Idle;
-  if (use_item_index >= 0) {
-    stop_current_cast();  // Terminate bard song (if active) in order to cast.
-    Zeal::GameStructures::GAMEITEMINFO *used_item = nullptr;
-    bool success = (use_item_timeout >= current_timestamp) && Zeal::Game::use_item(use_item_index, false, &used_item);
-    use_item_index = -1;
-    if (success) {
-      use_item_ack_state = UseItemState::CastRequested;
-      if (used_item && used_item->Common.CastTime == 0 && Zeal::Game::get_game()->IsOkToTransact())
-        use_item_ack_state = UseItemState::Idle;      // Instant bard clicky. Can't use request/ack format.
-      start_of_cast_timestamp = current_timestamp;    // Used in timeout check.
-      casting_visible_timestamp = current_timestamp;  // Insta-clickies may not update.
-      return;
-    }
-  }
+  if (activate_use_item()) return;
 
   int current_gem = get_next_gem_index();
-  if (current_gem < 0) return;  // Next song wasn't ready (possibly deferred), so skip and try again next tick.
+  if (current_gem < 0) return;  // Either the next song wasn't ready (possibly deferred) or activated an item.
   WORD current_gem_spell_id = char_info->MemorizedSpell[current_gem];
   if (current_gem_spell_id == kInvalidSpellId) return;  // simply skip empty gem slots (unexpected to occur)
 
@@ -327,6 +428,40 @@ void Melody::tick() {
   start_of_cast_timestamp = current_timestamp;
 }
 
+// Activates (casts) from an item if there is a valid queued use_item_index.
+bool Melody::activate_use_item() {
+  if (use_item_index < 0) return false;
+
+  if (Zeal::Game::GameInternal::IsPlayerABardAndSingingASong())
+    stop_current_song_quietly();  // Use the custom stop to reduce log spam.
+  else
+    stop_current_cast();  // Not expected to be needed but just in case.
+
+  Zeal::GameStructures::GAMEITEMINFO *used_item = nullptr;
+  ULONGLONG current_timestamp = GetTickCount64();
+  bool success = (use_item_timeout >= current_timestamp) && Zeal::Game::use_item(use_item_index, false, &used_item);
+  if (success) {
+    casting_melody_spell_id = used_item ? used_item->Common.SpellIdEx : kInvalidSpellId;
+    if (used_item && used_item->Common.CastTime <= 0) {  // Blazing vambraces == -1 vs 0 for most instants.
+      // Instant clickies. Bard song insta-clicks do not receive an OP_ManaChange message (stop_cast) so there is
+      // no ack handshaking required while normal clickies do so we set the CastStarted state to expect it.
+      const auto *spell = Zeal::Game::get_spell_from_id(casting_melody_spell_id);
+      bool is_bard_song = (spell && spell->IsBardSong());
+      use_item_ack_state = is_bard_song ? UseItemState::Idle : UseItemState::CastStarted;
+    } else {
+      // Clickies with a cast time have a time gap where the client is not aware of the cast yet and is waiting
+      // for the server to send back OP_BeginCast from activating the item. The CastRequested blocks the
+      // melody tick() from trying to advance to the next song step.
+      use_item_ack_state = UseItemState::CastRequested;
+    }
+    start_of_cast_timestamp = current_timestamp;    // Used in timeout check.
+    casting_visible_timestamp = current_timestamp;  // Insta-clickies may not update.
+  }
+  if (is_verbose) Zeal::Game::print_chat("Melody use item: %d, state: %d", casting_melody_spell_id, use_item_ack_state);
+  use_item_index = -1;
+  return success;
+}
+
 // Returns true if the gem's recast timer is not active.
 bool Melody::is_gem_ready(int gem_index) {
   bool invalid_index = gem_index < 0 || gem_index >= GAME_NUM_SPELL_GEMS;
@@ -343,7 +478,8 @@ bool Melody::is_gem_ready(int gem_index) {
   return true;
 }
 
-// Returns the gem index of the next song to cast (based on retries, deferred, index loop).
+// Returns the gem index of the next song to cast (based on retries, deferred, index loop) or
+// internally activates an item step if that is the next valid step.
 int Melody::get_next_gem_index() {
   auto char_info = Zeal::Game::get_char_info();
 
@@ -352,20 +488,31 @@ int Melody::get_next_gem_index() {
   if (char_info && retry_spell_id != kInvalidSpellId) {
     int spell_id = retry_spell_id;
     retry_spell_id = kInvalidSpellId;  // Reset so it only retries once.
-    for (auto gem_index : songs)
-      if (char_info->MemorizedSpell[gem_index] == spell_id) return gem_index;
+    for (const auto &step : songs)
+      if (!step.is_item() && char_info->MemorizedSpell[step.gem] == spell_id) return step.gem;
   }
 
   // Then check if there is already a deferred song.
   if (char_info && deferred_spell_id) {
-    for (auto gem_index : songs)
-      if (char_info->MemorizedSpell[gem_index] == deferred_spell_id && is_gem_ready(gem_index)) return gem_index;
+    for (const auto &step : songs)
+      if (!step.is_item() && char_info->MemorizedSpell[step.gem] == deferred_spell_id && is_gem_ready(step.gem))
+        return step.gem;
   }
 
-  // Finally if neither of those, advance to the next song.
+  // Finally if neither of those, advance to the next song step.
   current_index++;
   if (current_index >= songs.size() || current_index < 0) current_index = 0;
-  int current_gem = songs[current_index];
+
+  // If the next step is an item, then check if it is valid and if so immediately activate it.
+  if (songs[current_index].is_item()) {
+    if (songs[current_index].is_item_valid()) {
+      use_item(songs[current_index].item_slot_id);
+      activate_use_item();
+    }
+    return -1;  // Done with this tick cycle (no gem to cast).
+  }
+
+  int current_gem = songs[current_index].gem;
   if (is_gem_ready(current_gem)) return current_gem;
 
   // The song wasn't ready so try to defer. Our defer queue supports only one song.
@@ -388,19 +535,66 @@ void Melody::handle_deactivate_ui() {
   handle_stop_cast_callback(3, Zeal::Game::get_self()->ActorInfo->CastingSpellId);
 }
 
-// Extra server handshake tracking for clicky casts.
-bool Melody::handle_opcode(int opcode) {
-  if (use_item_ack_state == UseItemState::Idle) return false;
+// Extra server handshake tracking for clicky casts. The OP_BeginCast packet is used to
+// transition the use_item_ack_state from CastRequested to CastStarted to cover the gap
+// until casting actually starts on the client. The OP_Action packet is used to detect
+// the end of casting for Bard song clickies since the server doesn't send the OP_ManaChange
+// that triggers the handle_stop_cast_callback() like normal clickies.
+bool Melody::handle_opcode(int opcode, char *buffer, UINT len) {
+  if (!is_active || use_item_ack_state == UseItemState::Idle) return false;
 
-  const int OP_BeginCast = 0x40a9;      // Sent in responce to a CastSpell().
-  const int OP_ManaChange = 0x417f;     // Sent after normal clickiese or song end.
-  const int OP_MemorizeSpell = 0x4182;  // Sent after normal bard song finishes casting.
-  if (opcode == OP_ManaChange || opcode == OP_MemorizeSpell) {
-    use_item_ack_state = UseItemState::Idle;  // Needed for insta clicky to clear wait for begin cast.
-  } else if (opcode == OP_BeginCast && use_item_ack_state == UseItemState::CastRequested) {
-    use_item_ack_state = UseItemState::CastStarted;  // Needed for pending cast start of clickies.
+  if (opcode == Zeal::Packets::BeginCast && use_item_ack_state == UseItemState::CastRequested) {
+    const auto *self = Zeal::Game::get_self();
+    if (!self || !buffer || len < sizeof(Zeal::Packets::BeginCast_Struct)) return false;
+
+    const auto *begin_cast = reinterpret_cast<const Zeal::Packets::BeginCast_Struct *>(buffer);
+    if (begin_cast->caster_id == self->SpawnId) use_item_ack_state = UseItemState::CastStarted;
+
+    if (is_verbose && begin_cast->caster_id == self->SpawnId && begin_cast->spell_id != casting_melody_spell_id)
+      Zeal::Game::print_chat("Melody BeginCast mismatch: spell ID: %d vs %d", begin_cast->spell_id,
+                             casting_melody_spell_id);
+  } else if (opcode == Zeal::Packets::Action && use_item_ack_state == UseItemState::CastStarted) {
+    if (!buffer || len < sizeof(Zeal::Packets::Action_Struct)) return false;
+
+    // First check if this is a spell action with this client as the source. Note that we don't check
+    // for the success flag (buff_unknown == 0x04) since we only care that the cast completed and
+    // the second packet with success may not get sent if blocked for some reason.
+    const auto *self = Zeal::Game::get_self();
+    const auto *action = reinterpret_cast<const Zeal::Packets::Action_Struct *>(buffer);
+    if (!self || action->source != self->SpawnId || action->type != 231) return false;  // Not our spell.
+
+    // Then confirm the spell id matches the one we expect from our melody start of cast.
+    if (action->spell != casting_melody_spell_id || casting_melody_spell_id == kInvalidSpellId) {
+      if (is_verbose)
+        Zeal::Game::print_chat("Melody Action mismatch: %d vs %d", action->spell, casting_melody_spell_id);
+      return false;
+    }
+
+    // And finally check if this is a bard song clicky that needs a manual ack when casting is finished.
+    const auto *spell = Zeal::Game::get_spell_from_id(casting_melody_spell_id);
+    if (spell && spell->IsBardSong() && self->ActorInfo && self->ActorInfo->CastingSpellId == casting_melody_spell_id &&
+        self->ActorInfo->CastingSpellGemNumber == 0) {
+      self->ActorInfo->CastingSpellGemNumber = 0xff;  // Set the manual ack to avoid the timeout delay.
+      casting_melody_spell_id = kInvalidSpellId;
+      use_item_ack_state = UseItemState::Idle;  // Disable to prevent responding to rewinds or future action opcodes.
+
+      if (is_verbose) Zeal::Game::print_chat("Melody: Cast finished for spell ID: %d", action->spell);
+    }
   }
+
   return false;
+}
+
+// Development debug dump of current state.
+void Melody::dump() const {
+  Zeal::Game::print_chat("is_active: %d, current_index: %d, casting_id: %d", is_active, current_index,
+                         casting_melody_spell_id);
+  Zeal::Game::print_chat("retry_count: %d, retry_id: %d, deferred_id: %d", retry_count, retry_spell_id,
+                         deferred_spell_id);
+  Zeal::Game::print_chat("use_item: %d, ack_state: %d, item_timeout: %llu", use_item_index, use_item_ack_state,
+                         use_item_timeout);
+  Zeal::Game::print_chat("enter_zone_time: %llu, casting_visible: %llu, start_of_cast: %llu", enter_zone_time,
+                         casting_visible_timestamp, start_of_cast_timestamp);
 }
 
 Melody::Melody(ZealService *zeal) {
@@ -410,17 +604,29 @@ Melody::Melody(ZealService *zeal) {
   zeal->callbacks->AddGeneric([this]() { end(); }, callback_type::CharacterSelect);
   zeal->callbacks->AddGeneric([this]() { handle_deactivate_ui(); }, callback_type::DeactivateUI);
   zeal->callbacks->AddGeneric([this]() { enter_zone_time = GetTickCount64(); }, callback_type::EnterZone);
-  zeal->callbacks->AddPacket([this](UINT opcode, char *buffer, UINT len) { return handle_opcode(opcode); },
+  zeal->callbacks->AddPacket([this](UINT opcode, char *buffer, UINT len) { return handle_opcode(opcode, buffer, len); },
                              callback_type::WorldMessage);
   zeal->hooks->Add("StopCast", 0x4cb510, StopCast, hook_type_detour);  // Hook in to end melody as well.
   zeal->commands_hook->Add(
-      "/melody", {"/mel"}, "Bard only, auto cycles 5 songs of your choice.", [this](std::vector<std::string> &args) {
+      "/melody", {"/mel"},
+      "Bard only, auto cycles up to 5 songs or bard song item clicks (0.10, 2.3, Case_sensitive_name_search).",
+      [this](std::vector<std::string> &args) {
         if (args.size() > 1 && args[1] == "resume") {
           resume();  // Continues an interrupted melody.
           return true;
         }
 
-        end(true);  // otherwise any active melodies are always terminated
+        if (args.size() == 2 && args[1] == "dump") {
+          dump();
+          return true;
+        }
+
+        if (args.size() == 2 && args[1] == "verbose") {
+          is_verbose = !is_verbose;  // Just toggle state.
+          return true;
+        }
+
+        end(true, false);  // otherwise any active melodies are always terminated
 
         if (!Zeal::Game::get_char_info() || Zeal::Game::get_char_info()->Class != Zeal::GameEnums::ClassTypes::Bard) {
           Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Only bards can keep a melody.");
@@ -432,16 +638,19 @@ Melody::Melody(ZealService *zeal) {
           return true;
         }
 
-        std::vector<int> new_songs;
-        for (int i = 1; i < args.size(); i++)  // start at argument 1 because 0 is the command itself
+        std::vector<MelodyStep> new_songs;
+        for (size_t i = 1; i < args.size(); i++)  // start at argument 1 because 0 is the command itself
         {
-          int current_gem = -1;
-          if (Zeal::String::tryParse(args[i], &current_gem))
-            new_songs.push_back(current_gem - 1);  // base 0
-          else {
-            Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Melody parsing error: Usage example: /melody 1 2 3 4");
+          MelodyStep step(args[i]);
+          if (!step.is_valid(true)) {
+            Zeal::Game::print_chat(USERCOLOR_SPELL_FAILURE, "Melody example: /melody 1 2 3 0.10 Composers_Chestplate");
+            Zeal::Game::print_chat(
+                USERCOLOR_SPELL_FAILURE,
+                "Specify songs with 1-8 for gems or use either bag#.slot# (bag 0 = equipped slots) or "
+                "case sensitive start of item name with underscore replacing spaces.");
             return true;
           }
+          new_songs.push_back(step);
         }
         start(new_songs);
         return true;  // return true to stop the game from processing any further on this command, false if you want to

@@ -8,6 +8,8 @@ enum opcodes {
   PlayerProfile = 0x4036,
   ZoneSpawns = 0x415f,
   DeathDamage = 0x404A,
+  BeginCast = 0x40a9,
+  Action = 0x4046,
   Damage = 0x4058,
   ConsentResponse = 0x40D5,
   PrintNonMeleeDamage = 0x4236,
@@ -22,24 +24,14 @@ enum opcodes {
   Assist = 0x4200,
   Stamina = 0x4157,
   RequestClientZoneChange = 0x414d,
+  RaidUpdate = 0x4260,
   ItemLinkResponse = 0x4264,
-  RaidUpdate = 0x4062,
   RaidInvite = 0x425f,  // Client request opcode for all raid commands (OP_RaidInvite in EQMacEmu).
 };
 
 // Values of RaidGeneral_Struct::action (EQMacEmu zone/raids.h).
 constexpr UINT32 kRaidCommandChangeRaidLeader = 20;
 
-// OP_RaidInvite payload (EQMacEmu common/eq_packet_structs.h). Leader only; the server reads the new
-// leader's name from leader_name.
-struct RaidGeneral_Struct {
-  /*000*/ UINT32 action;
-  /*004*/ char player_name[64];
-  /*068*/ char leader_name[64];
-  /*132*/ UINT32 parameter;
-  /*136*/
-};
-static_assert(sizeof(RaidGeneral_Struct) == 136, "RaidGeneral_Struct must match the 136 byte server struct");
 
 struct Animation_Struct {
   /*00*/ UINT16 spawnid;
@@ -70,6 +62,32 @@ struct CorpseDrag_Struct {
   /*064*/ char DraggerName[64];
   /*128*/ UINT8 Unknown128[24];
   /*152*/
+};
+
+struct BeginCast_Struct {
+  /*000*/ UINT16 caster_id;
+  /*002*/ UINT16 spell_id;
+  /*004*/ UINT16 cast_time;  // Base cast time in ms (the client applies any reductions for itself).
+  /*006*/ UINT16 unknown006;
+};
+
+struct Action_Struct {
+  /*000*/ UINT16 target;
+  /*002*/ UINT16 source;
+  /*004*/ UINT16 level;
+  /*006*/ UINT16 target_level;
+  /*008*/ INT32 instrument_mod;
+  /*00C*/ float force;
+  /*010*/ float sequence;
+  /*014*/ float pushup_angle;
+  /*018*/ UINT8 type;  // 231 for spells.
+  /*019*/ UINT8 unknown019;
+  /*01A*/ UINT16 spell_id_unused;
+  /*01C*/ INT16 tap_amount;
+  /*01E*/ UINT16 spell;
+  /*020*/ UINT8 unknown020;
+  /*021*/ UINT8 buff_unknown;
+  /*022*/ UINT16 unknown022;
 };
 
 struct Damage_Struct {
@@ -157,6 +175,16 @@ struct Illusion_Struct {
   /*020*/
 };
 
+// Also the OP_RaidInvite payload (EQMacEmu common/eq_packet_structs.h): the server reads a new leader's name
+// from leader_name.
+struct RaidGeneral_Struct {
+  /*00*/ INT32 action;          // RaidCommandRemoveMember = 1, RaidCommandSendDisband = 10
+  /*04*/ char player_name[64];  // should both be the player's name
+  /*68*/ char leader_name[64];
+  /*132*/ UINT32 parameter;
+};
+static_assert(sizeof(RaidGeneral_Struct) == 136, "RaidGeneral_Struct must match the 136 byte server struct");
+
 struct Stamina_Struct {
   /*00*/ INT16 food;    // clamped to 0 - 32000
   /*02*/ INT16 water;   // clamped to 0 - 32000
@@ -169,10 +197,10 @@ struct ItemViewRequest_Struct {
 };
 
 struct ConsentResponse_Struct {
-	char grantname[64];
-	char ownername[64];
-	UINT8 permission;
-	char zonename[32];
+  char grantname[64];
+  char ownername[64];
+  UINT8 permission;
+  char zonename[32];
 };
 
 }  // namespace Packets
