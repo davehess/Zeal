@@ -739,6 +739,11 @@ Manual editing of the ini file is required to copy from old section to the new s
       - Colored arrow: (`R` = red, `O` = orange, `Y` = yellow, `G` = green, `B` = blue, `W` = white)
       - Green pet paw symbol: `P`
       - Red stop sign (octagon): `S`
+      - Icon shapes (only drawn with `/tag shapes on`, default off; otherwise they show as a colored arrow):
+        `K` = skull, `X` = red X, `A` = gold sword, `D` = blue diamond, `F` = green flame, `T` = purple star,
+        `WP` = wolf (`^WP^`), `M` = moon, `U` = lasso, `H` = shield
+      - Numbered badges (also need `/tag shapes on`): `1` to `12` (e.g. `^7^`, `^12^`), such as a kill or
+        crowd control order
       - Clear any existing shape: `-`
 - Tags can be cleared with:
   - `/tag clear`: Clears tag from current target if there is a target else all tags
@@ -750,6 +755,8 @@ Manual editing of the ini file is required to copy from old section to the new s
     that will trigger other clients to autojoin `<name>`.  `<name>` must start with `ZT`.
   - `/tag join <name>` joins the chat channel for broadcasting and receiving tags
     - If `<name>` is omitted, it joins the last chat channel previously used
+- Icon shapes and numbered badges are drawn only when `/tag shapes on` is set (stored per install). With it off
+  nothing extra is built or drawn, so there is no cost to players who do not use them
 - Broadcast messages can be filtered by setting `/tag filter on`
   - This routes received messages to the `Zeal Spam` chat filter channel
   - Allows the use of `/tag suppress on` to completely squelch the broadcasts
@@ -769,6 +776,8 @@ Manual editing of the ini file is required to copy from old section to the new s
   - `/tag rsay Assist me` broadcasts a raid-wide tag that sets 'Assist Me'
   - `/tag rsay +TASH` appends ' | TASH' to the tag text (does not affect explicit shape)
   - `/tag rsay ^p^` adds an explicit paw shape above the target for all raid members
+  - `/tag rsay ^k^Kill first` adds a skull above the target with the text 'Kill first' (needs `/tag shapes on`)
+  - `/tag rsay ^3^` adds a numbered badge 3 above the target (needs `/tag shapes on`)
   - `/tag rsay -` clears text but leaves shape if explicitly set
   - `/tag rsay ^-^` leaves text but clears the shape
   - `/tag rsay +^Y^OFFTANK` appends ' | OFFTANK' to the tag text and adds explicit yellow arrow shape

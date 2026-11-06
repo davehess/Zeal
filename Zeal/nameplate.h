@@ -57,6 +57,7 @@ class NamePlate {
   ZealSetting<bool> setting_tag_suppress = {false, "Zeal", "NameplateTagSuppress", false,
                                             [this](bool val) { synchronize_pretty_print(); }};
   ZealSetting<bool> setting_tag_prettyprint = {false, "Zeal", "NameplateTagPrettyPrint", false};
+  ZealSetting<bool> setting_tag_shapes = {false, "Zeal", "NameplateTagShapes", false};
   ZealSetting<bool> setting_tag_default_arrow = {true, "Zeal", "NameplateTagDefaultArrow", false};
   ZealSetting<bool> setting_tag_alternate_symbols = {false, "Zeal", "NameplateTagAlternateSymbols", false};
   ZealSetting<std::string> setting_tag_channel = {"", "Zeal", "NameplateTagChannel", false};
@@ -176,6 +177,7 @@ class NamePlate {
 
   std::unique_ptr<SpriteFont> sprite_font;
   std::unique_ptr<class TagArrows> tag_arrows;
+  bool tag_arrows_icon_shapes = false;  // Whether tag_arrows was built with the icon shapes.
   std::unordered_map<struct Zeal::GameStructures::Entity *, NamePlateInfo> nameplate_info_map;
   std::unordered_map<WORD, CastInfo> cast_info_map;  // Active casts keyed by spawn id.
   std::function<void()> update_options_ui_callback;
