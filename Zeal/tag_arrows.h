@@ -1,8 +1,10 @@
 #pragma once
 
+#include <array>
 #include <vector>
 
 #include "directx.h"
+#include "tag_shapes.h"
 #include "vectors.h"
 
 // Directx 8 compatible class for rendering a 3-D shapes at specified locations.
@@ -12,6 +14,17 @@ class TagArrows {
     Arrow = 0,    // 3-D arrow pointing down (primary shape).
     Octagon = 1,  // 3-D extruded octagon (stop-sign) shape.
     Paw = 2,      // 3-D extruded pet paw print shape.
+    // Icon shapes built by TagShapes (only when constructed with icon_shapes; keep in TagShapes::Kind order).
+    Skull = 3,
+    Cross = 4,
+    Sword = 5,
+    Diamond = 6,
+    Flame = 7,
+    Star = 8,
+    Moon = 9,
+    Shield = 10,
+    Number1 = 11,  // Numbered badges: Number1 + (n - 1), up to Number12.
+    Number12 = 22,
   };
 
   // Vertices allow texturing and color modulation.
@@ -22,7 +35,8 @@ class TagArrows {
     D3DCOLOR color;  // Color of surfaces.
   };
 
-  explicit TagArrows(IDirect3DDevice8 &device);
+  // The icon shapes (TagShapes) are only built when icon_shapes is set, so they cost nothing when unused.
+  explicit TagArrows(IDirect3DDevice8 &device, bool icon_shapes = false);
   ~TagArrows();
 
   // Disable copy.
@@ -67,6 +81,7 @@ class TagArrows {
   void CalculateArrowVertices();    // Calculates the cached, fixed 3D arrow shape stored in vertices.
   void CalculateOctagonVertices();  // Calculates the cached, fixed 3D octagon shape stored in vertices.
   void CalculatePawVertices();      // Calculates the cached, fixed 3D paw shape stored in vertices.
+  void CalculateIconShapes();       // Builds the TagShapes meshes and appends their indices.
   bool CreateIndexBuffer();         // Populates the index_buffer LUT for mapping triangles across vertices.
   void AppendArrowIndices();
   void AppendOctagonIndices();
@@ -76,6 +91,7 @@ class TagArrows {
   RenderInfo AllocateArrow(const Arrow &arrow);
   RenderInfo AllocateOctagon(const Arrow &arrow);
   RenderInfo AllocatePaw(const Arrow &arrow);
+  RenderInfo AllocateIconShape(const Arrow &arrow);
   int AppendVertices(std::vector<ArrowVertex> &vertices);
 
   IDirect3DDevice8 &device;
@@ -99,4 +115,13 @@ class TagArrows {
   unsigned int octagon_primitive_count = 0;
   unsigned int paw_index_start = 0;
   unsigned int paw_primitive_count = 0;
+
+  struct IconShape {
+    TagShapes::Mesh mesh;
+    unsigned int index_start = 0;
+    unsigned int primitive_count = 0;
+  };
+
+  std::array<IconShape, static_cast<size_t>(TagShapes::Kind::Count)> icon_shapes;  // Indexed from Shape::Skull.
+  size_t buffer_vertices;  // Vertex buffer capacity: the arrow color cache plus every other shape once.
 };
