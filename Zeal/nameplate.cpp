@@ -22,9 +22,8 @@
 #include "string_util.h"
 #include "tag_arrows.h"
 #include "target_ring.h"
-#include "ui_skin.h"
-
 #include "tick.h"
+#include "ui_skin.h"
 #include "zeal.h"
 
 // Test cases:

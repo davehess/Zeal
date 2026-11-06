@@ -16,7 +16,9 @@ The three folders
 -----------------
 
   tagicons\            Pictures that come with this Zeal build. An update may replace them,
-                       so do not edit these.
+                       so do not edit these. They include the logos of the guilds that sent
+                       one in, cut to size: <code>.png for the icon (ICON.png for Continuum)
+                       and F<code>.png for the banner. Each logo belongs to its guild.
 
   tagicons\custom\     YOUR pictures. Nothing ever installs into this folder, and a picture
                        here wins over one with the same name in tagicons\, so your changes
@@ -32,7 +34,8 @@ To change a guild's icon or banner
 ----------------------------------
 
   1. Copy its file from templates\ into custom\ (for example IEUR.png or FEUR.png).
-  2. Edit it in any image editor that keeps transparency (PNG, or 32-bit TGA).
+  2. Edit it in any image editor that keeps transparency (PNG, or 32-bit TGA), and scale it
+     to 128 x 128 or smaller (the templates are 160 x 160, too big to load as they are).
   3. In game, type /tag icons. Your picture is used from then on, and the list
      marks it "(yours)".
 
@@ -46,7 +49,7 @@ Rules for a picture
 
   - The name is 1 to 6 letters or digits, then .png or .tga. Windows reserves a few names
     (CON, PRN, AUX, NUL, COM1 to COM9, LPT1 to LPT9) and no file can use them.
-  - At most 512 x 512 pixels and 1 MB.
+  - At most 128 x 128 pixels and 1 MB. Wider than twice its height is squeezed.
   - A transparent background, so it floats over the nameplate like the built-in marks.
 
 Only you see your pictures. Everyone else sees their own picture with that name if they
