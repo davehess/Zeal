@@ -50,73 +50,6 @@ enum TagArrowColor : DWORD {
   White = D3DCOLOR_XRGB(0xff, 0xff, 0xff),
 };
 
-// Icon shapes (enabled with /tag shapes) are found again from their tag color alone, so each has a unique color.
-// The numbered badges ^1^ to ^12^ share one white and differ only in the low bits of blue.
-struct TagIcon {
-  char key;
-  DWORD color;
-  TagArrows::Shape shape;
-  const char *name;
-};
-
-static constexpr TagIcon kTagIcons[] = {
-    {'k', D3DCOLOR_XRGB(0xe8, 0xe2, 0xd1), TagArrows::Shape::Skull, "Skull"},
-    {'x', D3DCOLOR_XRGB(0xe8, 0x1c, 0x1c), TagArrows::Shape::Cross, "X"},
-    {'a', D3DCOLOR_XRGB(0xf2, 0xc0, 0x2a), TagArrows::Shape::Sword, "Sword"},
-    {'d', D3DCOLOR_XRGB(0x2e, 0x8c, 0xf5), TagArrows::Shape::Diamond, "Diamond"},
-    {'f', D3DCOLOR_XRGB(0x3c, 0xd8, 0x3c), TagArrows::Shape::Flame, "Flame"},
-    {'t', D3DCOLOR_XRGB(0xb5, 0x5c, 0xf2), TagArrows::Shape::Star, "Star"},
-    {'m', D3DCOLOR_XRGB(0xf2, 0xf2, 0xf5), TagArrows::Shape::Moon, "Moon"},
-    {'h', D3DCOLOR_XRGB(0xa8, 0xb0, 0xbc), TagArrows::Shape::Shield, "Shield"},
-};
-static constexpr DWORD kNumberColorBase = D3DCOLOR_XRGB(0xf0, 0xf0, 0xf0);
-static constexpr int kMaxTagNumber = 12;
-
-static constexpr bool TagIconColorsAreUnique() {
-  constexpr DWORD kOthers[] = {TagArrowColor::Paw,    TagArrowColor::StopSign, TagArrowColor::Red,
-                               TagArrowColor::Orange, TagArrowColor::Yellow,   TagArrowColor::Green,
-                               TagArrowColor::Blue,   TagArrowColor::White};
-  for (const auto &icon : kTagIcons) {
-    for (DWORD other : kOthers)
-      if (icon.color == other) return false;
-    for (const auto &icon2 : kTagIcons)
-      if (&icon != &icon2 && icon.color == icon2.color) return false;
-    if (icon.color > kNumberColorBase && icon.color <= kNumberColorBase + kMaxTagNumber) return false;
-  }
-  return true;
-}
-
-static_assert(TagIconColorsAreUnique());
-
-// Returns the badge number (1 to 12) of a tag color, else 0.
-static int GetTagNumber(DWORD tag_color) {
-  if (tag_color <= kNumberColorBase || tag_color > kNumberColorBase + kMaxTagNumber) return 0;
-  return static_cast<int>(tag_color - kNumberColorBase);
-}
-
-// The shape drawn for a tag color. Icon shapes are only drawn when enabled; otherwise (and for plain colors)
-// the tag draws as before: a paw, a stop sign or an arrow.
-static TagArrows::Shape GetTagShape(DWORD tag_color, bool icon_shapes) {
-  if (tag_color == TagArrowColor::Paw) return TagArrows::Shape::Paw;
-  if (tag_color == TagArrowColor::StopSign) return TagArrows::Shape::Octagon;
-  if (!icon_shapes) return TagArrows::Shape::Arrow;
-  if (int number = GetTagNumber(tag_color))
-    return static_cast<TagArrows::Shape>(static_cast<int>(TagArrows::Shape::Number1) + number - 1);
-  for (const auto &icon : kTagIcons)
-    if (icon.color == tag_color) return icon.shape;
-  return TagArrows::Shape::Arrow;
-}
-
-// Display name of an icon shape (nullptr for the arrows, paw and stop sign).
-static const char *GetShapeName(DWORD tag_color) {
-  static constexpr const char *kNumberNames[kMaxTagNumber] = {"#1", "#2", "#3", "#4",  "#5",  "#6",
-                                                              "#7", "#8", "#9", "#10", "#11", "#12"};
-  if (int number = GetTagNumber(tag_color)) return kNumberNames[number - 1];
-  for (const auto &icon : kTagIcons)
-    if (icon.color == tag_color) return icon.name;
-  return nullptr;
-}
-
 static float z_position_offset = 1.5f;  // Static global to allow parse overrides during evaluation.
 
 static void ChangeDagStringSprite(Zeal::GameStructures::GAMEDAGINFO *dag, int fontTexture, const char *str) {
@@ -450,10 +383,7 @@ void NamePlate::load_sprite_font() {
   sprite_font->set_shadow_offset_factor(setting_shadow_offset_factor.get());
 
   // Tag text with zeal fonts and arrows are linked together so just create it here as well.
-  if (!tag_arrows) {
-    tag_arrows_icon_shapes = setting_tag_shapes.get();
-    tag_arrows = std::make_unique<TagArrows>(*device, tag_arrows_icon_shapes);
-  }
+  if (!tag_arrows) tag_arrows = std::make_unique<TagArrows>(*device);
 }
 
 void NamePlate::clean_ui() {
@@ -581,11 +511,6 @@ static float get_bearing(const Zeal::GameStructures::Entity *self, const Zeal::G
 void NamePlate::render_ui() {
   if (!setting_zeal_fonts.get() || (!Zeal::Game::is_in_game() && !Zeal::Game::is_in_char_select())) return;
 
-  // Turning /tag shapes on or off changes which meshes the tag arrows hold: reload them along with the font.
-  if (tag_arrows && tag_arrows_icon_shapes != setting_tag_shapes.get()) {
-    sprite_font.reset();
-    tag_arrows.reset();
-  }
   if (!sprite_font) load_sprite_font();
   if (!sprite_font) {
     Zeal::Game::print_chat("Nameplate: Failed to load zeal fonts, disabling");
@@ -601,7 +526,6 @@ void NamePlate::render_ui() {
   if (self && *Zeal::Game::camera_view != Zeal::GameEnums::CameraView::FirstPerson && Zeal::Game::is_targetable(self))
     visible_entities.push_back(self);  // Add self nameplate.
 
-  const bool icon_shapes = setting_tag_shapes.get();
   std::vector<RenderInfo> render_list;
   for (const auto &entity : visible_entities) {
     // Added Unknown0003 check due to some bad results with 0x05 at startup causing a crash.
@@ -660,7 +584,9 @@ void NamePlate::render_ui() {
     // If an explicit tag color was set, use that color otherwise use the nameplate color.
     if (show_tag && info.tag_color != TagArrowColor::Off) {
       auto tag_color = (info.tag_color == TagArrowColor::Nameplate) ? nameplate_color : info.tag_color;
-      TagArrows::Shape shape = GetTagShape(info.tag_color, icon_shapes);  // From the tag: no nameplate color can match.
+      TagArrows::Shape shape = (tag_color == TagArrowColor::Paw)        ? TagArrows::Shape::Paw
+                               : (tag_color == TagArrowColor::StopSign) ? TagArrows::Shape::Octagon
+                                                                        : TagArrows::Shape::Arrow;
       position.z += sprite_font->get_text_height(full_text) + 1.5f;
       float bearing = (shape == TagArrows::Shape::Arrow) ? 0.0f : get_bearing(self, entity);
       tag_arrows->QueueTagShape(position, tag_color, shape, bearing);
@@ -1259,12 +1185,6 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
     return;
   }
 
-  if (args.size() >= 2 && args[1] == "shapes") {
-    if (args.size() > 2) setting_tag_shapes.set(args[2] == "on");
-    Zeal::Game::print_chat("Tag icon shapes: %s", setting_tag_shapes.get() ? "on" : "off");
-    return;
-  }
-
   if (args.size() >= 2 && args[1] == "tooltip") {
     if (args.size() > 2) setting_tag_tooltip.set(args[2] == "on");
     Zeal::Game::print_chat("Tag text tooltip: %s", setting_tag_tooltip.get() ? "on" : "off");
@@ -1356,13 +1276,10 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   }
 
   Zeal::Game::print_chat("Usage: /tag <on | off | clear>");
-  Zeal::Game::print_chat("Usage: /tag <tooltip | filter | suppress | prettyprint | persist | shapes> <on | off>");
+  Zeal::Game::print_chat("Usage: /tag <tooltip | filter | suppress | prettyprint | persist> <on | off>");
   Zeal::Game::print_chat("Usage: /tag target <text_to_match>");
   Zeal::Game::print_chat("Usage: /tag <gsay | rsay | rsgs | chat | local> <message | clear | channel>");
   Zeal::Game::print_chat("Usage: <message> prefixes: '+' to append, '^R^' or '*R:' for color arrow (R, O, Y, G, B, W)");
-  Zeal::Game::print_chat(
-      "Usage: with /tag shapes on, in place of the color: K skull, X x, A sword, D diamond, F flame, T star, M moon, "
-      "H shield, or a badge number 1 to 12 (like '^7^')");
   Zeal::Game::print_chat("Example: /tag rsay Assist me (broadcasts a tag to the raid)");
   Zeal::Game::print_chat(
       "Example: /tag rsgs Off tank (broadcasts a tag to raid if in raid else to group if in group else local)");
@@ -1370,23 +1287,9 @@ void NamePlate::handle_tag_command(const std::vector<std::string> &args) {
   return;
 }
 
-// Returns the key of a "^key^" prefix (text starts with '^'): two digits for "^10^" to "^12^", else the single
-// character after the '^'. Older clients read only that first character, so "^10^" shows them a plain arrow.
-static std::string ReadTagKey(const std::string &text) {
-  const bool two_digits = text.size() > 3 && std::isdigit(static_cast<unsigned char>(text[1])) &&
-                          std::isdigit(static_cast<unsigned char>(text[2])) && text[3] == '^';
-  return text.substr(1, two_digits ? 2 : 1);
-}
-
-// Returns a RGB color based on the key (else TagArrowColor::Off if no match).
-static D3DCOLOR GetTagArrowColor(const std::string &key) {
-  if (std::isdigit(static_cast<unsigned char>(key[0]))) {  // Numbered badge.
-    const int number = std::stoi(key);
-    return (number >= 1 && number <= kMaxTagNumber) ? kNumberColorBase + number : TagArrowColor::Off;
-  }
-  const char color_key = std::tolower(key[0]);
-  for (const auto &icon : kTagIcons)
-    if (icon.key == color_key) return icon.color;
+// Returns a RGB color based on the color_key (else TagArrowColor::Off if no match).
+static D3DCOLOR GetTagArrowColor(char color_key) {
+  color_key = std::tolower(color_key);
   switch (color_key) {
     case 'r':
       return TagArrowColor::Red;
@@ -1504,9 +1407,8 @@ bool NamePlate::handle_tag_message(const char *message, bool apply, bool allow_m
   // The tag arrow is either enabled explicitly with a specific color (which must be disabled explicitly)
   // or enabled by default on a NPC or corpse if there is any tag text (can suppress with ^-^).
   if (tag_text.size() > 2 && tag_text[0] == '^') {
-    const std::string key = ReadTagKey(tag_text);
-    it->second.tag_color = GetTagArrowColor(key);
-    tag_text = tag_text.substr(1 + key.size());
+    it->second.tag_color = GetTagArrowColor(tag_text[1]);
+    tag_text = tag_text.substr(2);
   } else if (it->second.tag_color == TagArrowColor::Off || it->second.tag_color == TagArrowColor::Nameplate) {
     bool disable_arrow = !setting_tag_default_arrow.get() || !takes_tag_text(entity) ||
                          (tag_text.empty() && it->second.tag_text.empty());
@@ -1673,17 +1575,13 @@ static std::string prettyprint_tag_message(const std::string &msg) {
   }
 
   if (text.size() > 2 && text[0] == '^') {
-    const std::string key = ReadTagKey(text);
-    const char *shape_name = GetShapeName(GetTagArrowColor(key));
-    if (key == "s" || key == "S")
+    if (text[1] == 's' || text[1] == 'S')
       prefix += "Stop";
-    else if (key == "p" || key == "P")
+    else if (text[1] == 'p' || text[1] == 'P')
       prefix += "Paw";
-    else if (shape_name)
-      prefix += shape_name;
     else
-      prefix += "Arrow:" + key;
-    text = text.substr(1 + key.size());
+      prefix += std::string("Arrow:") + text[1];
+    text = text.substr(2);
   }
 
   // Prefix ends with a ^ if one exists. Adding this search here to try and support
@@ -1773,7 +1671,6 @@ static const char *get_tag_color_description(DWORD color) {
     case TagArrowColor::StopSign:
       return "Stop";
     default:
-      if (const char *name = GetShapeName(color)) return name;
       break;
   }
   return "Unknown";
