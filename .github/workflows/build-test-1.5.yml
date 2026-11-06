@@ -1,0 +1,81 @@
+# Compile check for the tag pull request on Zeal 1.5.0-alpha0: the two tag commits
+# (persistence + corpses, received-tag name check) rebased onto upstream v1.5.0-alpha0.
+# Lives only on test-1.5, so it never rides into the PR branch. Every push rebuilds and
+# replaces the zip on the rolling `test-1.5-build` prerelease.
+
+name: Build test-1.5
+
+on:
+  push:
+    branches: [test-1.5]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-test-1.5
+  cancel-in-progress: true
+
+env:
+  SOLUTION_FILE_PATH: ./Zeal.sln
+  RELEASE_TAG: test-1.5-build
+
+jobs:
+  build:
+    name: Build and publish the test-1.5 prerelease
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Short hash for the build label
+        id: git
+        shell: bash
+        run: echo "short_hash=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+
+      - name: Build the Zeal solution
+        env:
+          ZEAL_BUILD_VERSION: test15-${{ steps.git.outputs.short_hash }}
+        run: |
+          msbuild /m /p:Configuration=Release /p:Platform=x86 /p:zeal_build_version=$env:ZEAL_BUILD_VERSION /p:LanguageStandard=stdcpp20 $env:SOLUTION_FILE_PATH /p:ExportHeader="" /p:ScanDependencies=""
+
+      - name: Zip the build (same contents as an upstream release)
+        shell: pwsh
+        run: |
+          7z a -tzip zeal_test-1.5.zip ./Release/Zeal.asi ./Release/Zeal.pdb ./Zeal/uifiles README.md
+          7z rn zeal_test-1.5.zip README.md Zeal_README.md
+
+      - name: Keep the zip on the run too
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeal_test-1.5_${{ steps.git.outputs.short_hash }}
+          path: zeal_test-1.5.zip
+
+      - name: Move the release tag to this commit
+        shell: bash
+        run: |
+          git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$RELEASE_TAG"
+
+      - name: Publish the rolling prerelease
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ env.RELEASE_TAG }}
+          name: test-1.5 (${{ steps.git.outputs.short_hash }})
+          commit: ${{ github.sha }}
+          prerelease: true
+          makeLatest: false
+          allowUpdates: true
+          removeArtifacts: true
+          artifacts: zeal_test-1.5.zip
+          artifactContentType: application/zip
+          artifactErrorsFailBuild: true
+          body: |
+            Test build of the fork's test-1.5 branch (commit ${{ github.sha }}): Zeal v1.5.0-alpha0 plus the
+            tag persistence, tag corpses and received-tag name check commits. Not an official Zeal release.
+            Install: copy Zeal.asi into the EverQuest folder and merge uifiles/ over yours. Zeal's options window
+            shows the build as "test15-${{ steps.git.outputs.short_hash }}".
