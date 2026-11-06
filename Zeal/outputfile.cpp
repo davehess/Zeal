@@ -7,9 +7,9 @@
 #include "callbacks.h"
 #include "commands.h"
 #include "game_functions.h"
-#include "miniz.h"
 #include "game_structures.h"
 #include "hook_wrapper.h"
+#include "miniz.h"
 #include "string_util.h"
 #include "zeal.h"
 
@@ -360,14 +360,11 @@ void OutputFile::export_quarmy(const std::vector<std::string> &args) {
   // Section 4: Tradeskills (SkillID and current value; 255 = untrained).
   oss << "SkillID" << t << "Value" << std::endl;
   constexpr Zeal::GameEnums::SkillType kTradeskills[] = {
-      Zeal::GameEnums::SkillFishing,       Zeal::GameEnums::SkillMakePoison,
-      Zeal::GameEnums::SkillTinkering,     Zeal::GameEnums::SkillResearch,
-      Zeal::GameEnums::SkillAlchemy,       Zeal::GameEnums::SkillBaking,
-      Zeal::GameEnums::SkillTailoring,     Zeal::GameEnums::SkillBlacksmithing,
-      Zeal::GameEnums::SkillFletching,     Zeal::GameEnums::SkillBrewing,
-      Zeal::GameEnums::SkillJewelryMaking, Zeal::GameEnums::SkillPottery};
-  for (auto skill : kTradeskills)
-    oss << static_cast<int>(skill) << t << self->CharInfo->Skills[skill] << std::endl;
+      Zeal::GameEnums::SkillFishing,   Zeal::GameEnums::SkillMakePoison,    Zeal::GameEnums::SkillTinkering,
+      Zeal::GameEnums::SkillResearch,  Zeal::GameEnums::SkillAlchemy,       Zeal::GameEnums::SkillBaking,
+      Zeal::GameEnums::SkillTailoring, Zeal::GameEnums::SkillBlacksmithing, Zeal::GameEnums::SkillFletching,
+      Zeal::GameEnums::SkillBrewing,   Zeal::GameEnums::SkillJewelryMaking, Zeal::GameEnums::SkillPottery};
+  for (auto skill : kTradeskills) oss << static_cast<int>(skill) << t << self->CharInfo->Skills[skill] << std::endl;
 
   // Section 5: CRC32 checksum for tamper detection.
   std::string content = oss.str();
@@ -443,16 +440,12 @@ void OutputFile::write_to_file(std::string data, std::string file_arg, std::stri
   file.close();
 }
 
-// The #popflags reply is plain server text and Zeal only sees it as incoming chat. So the export is a capture
-// window: send the commands, keep the server's reply lines until shortly after the last one, then write them.
-// The captured lines go to the file instead of the chat window. Nothing waits on the reply. "#popflags all" is
-// limited to server staff, so a player gets the overview plus each tier.
-static constexpr const char *kPopFlagsCommands[] = {"#popflags", "#popflags 1", "#popflags 2",
+// The #popflags reply is plain server text that Zeal only sees as incoming chat, so the export sends the commands
+// and copies the reply lines until shortly after the last one. "#popflags all" is staff-only.
+static constexpr const char *kPopFlagsCommands[] = {"#popflags",   "#popflags 1", "#popflags 2",
                                                     "#popflags 3", "#popflags 4", "#popflags 5"};
-static constexpr int kPopFlagsSpacingMs = 250;              // Gap between the commands, to stay gentle on the server.
-static constexpr int kPopFlagsCaptureMs = 1500;             // Window for the last reply to arrive.
-static constexpr ULONGLONG kPopFlagsMinIntervalMs = 15000;  // Never start a new request sooner than this.
-static constexpr size_t kPopFlagsMaxLines = 400;            // Safety cap on a runaway capture.
+static constexpr int kPopFlagsSpacingMs = 250;   // Gap between the commands, to stay gentle on the server.
+static constexpr int kPopFlagsCaptureMs = 1500;  // Window for the last reply to arrive.
 
 // Drops a leading chat timestamp such as "[15:18:05] " so the file holds the server's text only.
 static std::string PopFlagsStripTimestamp(const std::string &msg) {
@@ -468,9 +461,8 @@ void OutputFile::export_popflags(const std::vector<std::string> &args, bool verb
   Zeal::GameStructures::Entity *self = Zeal::Game::get_self();
   if (!self || !self->CharInfo || !Zeal::Game::is_in_game()) return;
 
-  const ULONGLONG now = GetTickCount64();
-  if (popflags_pending || (popflags_last_request_ms != 0 && now - popflags_last_request_ms < kPopFlagsMinIntervalMs)) {
-    if (verbose) Zeal::Game::print_chat("A #popflags request was just sent. Try again in a few seconds.");
+  if (popflags_pending) {
+    if (verbose) Zeal::Game::print_chat("A #popflags request is already running. Try again in a few seconds.");
     return;
   }
 
@@ -481,13 +473,12 @@ void OutputFile::export_popflags(const std::vector<std::string> &args, bool verb
     if (setting_export_format.get() != 0) popflags_filename += Zeal::Game::get_host_tag();
   }
   popflags_verbose = verbose;
-  popflags_last_request_ms = now;
   popflags_lines.clear();
+  popflags_in_reply = false;
   popflags_pending = true;
 
-  // Hide the local echo like the other # commands that Zeal sends. Every delayed send is scheduled here, never from
-  // inside a delayed callback (AddDelayed must not be re-entered). A delayed callback can run on more than one frame
-  // (it fires at >= its time but is removed only once the tick count passes it), so each send checks its turn.
+  // Scheduled from here, not from a callback (AddDelayed is not re-entrant). A delayed callback can run on two
+  // frames, so each send checks its turn.
   auto *callbacks = ZealService::get_instance()->callbacks.get();
   const int count = static_cast<int>(std::size(kPopFlagsCommands));
   Zeal::Game::do_say(true, kPopFlagsCommands[0]);
@@ -505,22 +496,19 @@ void OutputFile::export_popflags(const std::vector<std::string> &args, bool verb
 }
 
 void OutputFile::popflags_capture(std::string &msg, short channel) {
-  if (!popflags_pending || msg.empty()) return;
-  // The reply uses only these four server colours. Player chat, combat, spells and loot use the 0x100+ user colours
-  // and NPC dialogue the quest-say colour, so none of those are taken.
-  if (channel != CHATCOLOR_WHITE && channel != CHATCOLOR_LIME && channel != CHATCOLOR_YELLOW &&
-      channel != CHATCOLOR_RED) {
-    // The commands still come back as a say line ("[S] [Name]: #popflags 3" with abbreviated chat) although do_say
-    // hides the local echo, so drop those too. Not stored: they are our own commands, not flags.
-    if (msg.find("#popflags") != std::string::npos) msg.clear();
-    return;
-  }
-  if (popflags_lines.size() >= kPopFlagsMaxLines) return;
-  // The camp's own messages arrive during the window and are not flags.
-  if (msg.find("prepare your camp") != std::string::npos || msg.find("preparations to camp") != std::string::npos)
-    return;
-  popflags_lines.push_back(PopFlagsStripTimestamp(msg));
-  msg.clear();  // Keep the reply out of the chat window (the same suppression nameplate.cpp uses).
+  if (!popflags_pending) return;
+  // The reply is server text in these colours: "=== ... ===" / "--- ... ---" headers, "Label: value" lines and,
+  // once a header has been seen, yellow hints. Other system lines in the window (e.g. the camp message) are skipped.
+  const std::string line = PopFlagsStripTimestamp(msg);
+  const bool header = line.rfind("===", 0) == 0 || line.rfind("---", 0) == 0;
+  if (header) popflags_in_reply = true;
+  const bool reply =
+      (channel == CHATCOLOR_WHITE || channel == CHATCOLOR_LIME || channel == CHATCOLOR_YELLOW ||
+       channel == CHATCOLOR_RED) &&
+      (header || line.find(": ") != std::string::npos || (popflags_in_reply && channel == CHATCOLOR_YELLOW));
+  if (reply) popflags_lines.push_back(line);
+  // The commands come back as a say line even though do_say hides the local echo.
+  if (setting_popflags_hide.get() && (reply || msg.find("#popflags") != std::string::npos)) msg.clear();
 }
 
 void OutputFile::popflags_finish() {
@@ -562,7 +550,8 @@ static void __fastcall GameCamp(void *this_game, int unused_edx) {
     ZealService::get_instance()->outputfile->export_spellbook();
     ZealService::get_instance()->outputfile->export_quarmy();
     // Only ask the server when the camp is likely to go ahead (same peek as the auto-sit above).
-    if (Zeal::Game::is_in_game() && !Zeal::Game::GameInternal::IsNoSlashWndActive())
+    if (Zeal::Game::is_in_game() && !Zeal::Game::GameInternal::IsNoSlashWndActive() &&
+        ZealService::get_instance()->outputfile->setting_popflags_on_camp.get())
       ZealService::get_instance()->outputfile->export_popflags();
   }
   ZealService::get_instance()->hooks->hook_map["GameCamp"]->original(GameCamp)(this_game, unused_edx);
@@ -603,9 +592,21 @@ OutputFile::OutputFile(ZealService *zeal) {
             return true;
           }
         }
+        if (args.size() == 2 && Zeal::String::compare_insensitive(args[1], "hidepopflags")) {
+          setting_popflags_hide.toggle();
+          Zeal::Game::print_chat("Hiding the #popflags reply in chat is %s",
+                                 setting_popflags_hide.get() ? "on" : "off");
+          return true;
+        }
+        if (args.size() == 2 && Zeal::String::compare_insensitive(args[1], "popflagsoncamp")) {
+          setting_popflags_on_camp.toggle();
+          Zeal::Game::print_chat("Including the #popflags reply with the camp export is %s",
+                                 setting_popflags_on_camp.get() ? "on" : "off");
+          return true;
+        }
         Zeal::Game::print_chat(
             "usage: /outputfile [inventory | spellbook | quarmy | popflags | raidlist] [optional filename]");
-        Zeal::Game::print_chat("usage: /outputfile format [0 | 1]");
+        Zeal::Game::print_chat("usage: /outputfile format [0 | 1], /outputfile [ hidepopflags | popflagsoncamp ]");
         return true;
       });
   zeal->callbacks->AddOutputText(

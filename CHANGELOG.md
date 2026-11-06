@@ -22,6 +22,15 @@ Summarizes notable changes to Zeal
 
 * Added a slow tag shape `^SLOW^`: an hourglass
 
+* Guild banners (`^F<code>^`, F for flag) now carry the guild's logo (the same drawing as its `^I<code>^` icon) and its name
+  instead of its three letters, the name split over lines above and below the logo where that lets it be bigger.
+  The two longest names, Tranquility and Intervention, are split with a hyphen. The logo is drawn in the same
+  colors as the guild's icon, with a thin dark or light rim where those colors would not stand out from the flag, and
+  the name is near-black or near-white, whichever reads better on the flag. The Burnouts icon is now a lit rolled cigarette instead of a burning match
+
+* Guild banners use `^F<code>^` (F for flag), like `^FEUR^`; `^B<code>^` is no longer a banner key and is a blue
+  arrow again. `^F^` alone is still the flame
+
 * `/autoraidinvite` (`/ari`) is now saved per character in `zeal.ini` (key `AutoRaidInvite`) and restored at login
   instead of resetting when the client restarts. Added `/ari clear` (`off` still works) and `/ari` alone shows the
   status with the password masked
@@ -35,25 +44,77 @@ Summarizes notable changes to Zeal
 * Named pipe `custom` messages now announce `ARI set <password>` / `ARI clear` and `ARL on` / `ARL off` (never the
   ARL password). The raid leader is already in the raid message as `rank` `Raid Leader`
 
-* Guild banners (`^F<code>^`, F for flag) now carry the guild's logo (the same drawing as its `^I<code>^` icon) and its name
-  instead of its three letters, the name split over lines above and below the logo where that lets it be bigger.
-  The longest name, Intervention, is split with a hyphen (INTER- / VENTION) and Tranquility shows its short name, TRANQ. The logo is drawn in the same
-  colors as the guild's icon, with a thin dark or light rim where those colors would not stand out from the flag, and
-  the name is near-black or near-white, whichever reads better on the flag. The Burnouts icon is now a lit rolled cigarette instead of a burning match
-
-* Guild banners use `^F<code>^` (F for flag), like `^FEUR^`; `^B<code>^` is no longer a banner key and is a blue
-  arrow again. `^F^` alone is still the flame. A picture that replaces a banner is now named `F<code>.png`
-
-* The "Export data on /camp" option now also saves your `#popflags` output to `<name>-PoPFlags.txt`
-  - Sends `#popflags` and `#popflags 1` to `5` once per camp (`all` is limited to server staff) and writes the lines the
-    server answers with, plus the character and a timestamp. The reply goes to the file, not the chat window
-  - Nothing is written if the server does not answer
-  - Can also be run on demand with `/outputfile popflags [optional_filename]`
-
 ### Bug fixes
 
 * `/autoraidinvite` no longer builds a regular expression from the password, so passwords containing characters such
   as `(`, `[` or `.` match only themselves and the whole message must equal the password
+
+## [1.5.0 - alpha0] - 2026/11/05
+
+### New features
+
+* Added support for a mouse hover tooltip window over items, spells, buffs, etc
+  - Shows the same text as alt-click and respects the Enhanced Info toggle.
+  - Attempts to estimate each line's length, and resize the window up to a maximum size.
+  - Suppresses the native blue tooltip while in use.
+  - Enabled with the `Mouseover Tooltips` checkbox in Zeal general settings
+  - Or use the `/mouseover` command with more configuration options (see repo readme)
+
+* Added `/melody` support for bard song item clicks
+  - /melody now supports bard song item clicks such as Breath of
+    Harmony, Denon's drums, Composers chest and greaves, Lute of
+    Flowing Waters, War drums, etc as one of the 5 song steps
+  - There is still the 5 song limit (gem songs and item songs)
+  - See repo readme for usage
+  - Implemented new client/server handshaking for item clickies
+
+* Nameplate updates
+  - Added another optional nameplate bar (like hp, mana, stamina) that shows
+    the game server tick. Supports /tickreverse. Self-only.
+    - `/nameplate tickbars [on|off]` or Zeal nameplate tab checkbox
+  - Added optional cast bars for NPCs, self, and players
+    - Cast times for non-self assume no cast time reductions so
+      the bar may clear early
+    - `/nameplate castbars [on|off]` or Zeal nameplate tab checkbox
+    - `/nameplate castbarsplayers [on|off` or nameplate tab checkbox
+
+* Added the following new UI EQTypes (requires UI skin updates to display)
+  - EQType 87: Target distance. Blank if no target or > 250.
+  - EQType 88: Target level
+  - EQType 89: Target class (3-letter short name)
+    - The level and class are blank for corpses, `/anon`, and `/roleplay` players
+
+* Added new `/labels showtargetdistance` command that enables appending
+  the target distance (if < 250) to the EQType 28 target name label
+
+* Added a `/raidbars autoregroup` option that caches the group
+  number when raid members leave and attempts to move them to
+  that group when they rejoin (for use with `/ari` by raid leaders)
+
+* Raidbars now render after nameplates so they are drawn on top
+
+* Added a `/uicursor [on|off]` setting that enables drawing the mouse cursor while the UI is hidden (F10)
+
+* Expanded the `/spelleffects` to new effects beyond nosprites and bard songs
+  - See repo readme for description of new global, buff, healing, and individual effect override options
+
+* Added new `/outputfile popflags` command to query the server and write the
+  current popflags output to `<name>-PopFlags.txt`
+  - `/outputfile hidepopflags` will hide the chat output
+  - `/outputfile popflagsoncamp` can enable saving with `export data on camp`
+
+* Named pipe upgrades
+  - Export target texture, gender and size, and target equipment material type
+  - Export a death event with the spawnid and killer's name
+  - Export the item id and name shown in an item display window when opened
+  - Fix incorrect pipe delay status print
+
+* Updated a few rng/mag spell categories used by right click spellset selection
+  - Protection of the Wild moved to match Warder's protection
+  - Belt and Girdle of Magi'Kot moved to Summon Armor
+  - Blade of Walnan, Fist of Ixiblat, and Blade of the Kedge moved to Summon Weapon
+
+* Patched the client to not truncate social names on reload to 8 characters (now 15-char limit)
 
 
 ## [1.4.8] - 2026/10/01

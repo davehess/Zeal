@@ -22,6 +22,7 @@
 #include "string_util.h"
 #include "tag_arrows.h"
 #include "target_ring.h"
+#include "tick.h"
 #include "ui_skin.h"
 #include "zeal.h"
 
@@ -396,6 +397,7 @@ void NamePlate::handle_entity_destructor(Zeal::GameStructures::Entity *entity) {
     auto saved = saved_player_tags.find(get_player_name(entity));
     if (saved != saved_player_tags.end()) saved->second.live_seen = false;
   }
+  if (entity) cast_info_map.erase(entity->SpawnId);
 }
 
 // Helper function to return the normal shownames value for use by the UI combobox.
@@ -571,6 +573,13 @@ NamePlate::NamePlate(ZealService *zeal) {
   zeal->callbacks->AddGeneric([this]() { clean_ui(); }, callback_type::DXCleanDevice);
   zeal->callbacks->AddGeneric([this]() { render_ui(); }, callback_type::RenderUI);
   zeal->callbacks->AddGeneric([this]() { check_raid_shownames(); }, callback_type::MainLoop);
+  zeal->callbacks->AddGeneric([this]() { cast_info_map.clear(); }, callback_type::EnterZone);
+  zeal->callbacks->AddPacket(
+      [this](UINT opcode, char *buffer, UINT len) {
+        if (setting_cast_bars.get()) handle_cast_packet(opcode, buffer, len);
+        return false;  // continue processing
+      },
+      callback_type::WorldMessage);
   zeal->callbacks->AddGeneric([this]() { sync_saved_tags(); }, callback_type::MainLoop);
   initialized = true;
 }
@@ -595,6 +604,9 @@ void NamePlate::parse_args(const std::vector<std::string> &args) {
       {"healthbars", &setting_health_bars},
       {"manabars", &setting_mana_bars},
       {"staminabars", &setting_stamina_bars},
+      {"tickbar", &setting_tick_bar},
+      {"castbars", &setting_cast_bars},
+      {"castbarsplayers", &setting_cast_bars_players},
       {"zealfont", &setting_zeal_fonts},
       {"dropshadow", &setting_drop_shadow},
       {"extendedshownames", &setting_extended_shownames},
@@ -633,7 +645,8 @@ void NamePlate::parse_args(const std::vector<std::string> &args) {
   Zeal::Game::print_chat("Usage: /nameplate option where option is one of");
   Zeal::Game::print_chat("tint:  colors, concolors, targetcolor, targetblink, attackonly, charselect");
   Zeal::Game::print_chat("text:  hideself, x, hideraidpets, showpetownername, targetmarker, targethealth, inlineguild");
-  Zeal::Game::print_chat("font:  zealfont, dropshadow, healthbars, manabars, staminabars");
+  Zeal::Game::print_chat(
+      "font:  zealfont, dropshadow, healthbars, manabars, staminabars, tickbar, castbars, castbarsplayers");
   Zeal::Game::print_chat("misc:  extendedshownames");
   Zeal::Game::print_chat("shadows: /nameplate shadowfactor <float> (0.005 to 0.1 range)");
 }
@@ -734,6 +747,61 @@ static int get_stamina_percent(const Zeal::GameStructures::Entity *entity) {
   return -1;  // TODO: Support entities besides self.
 }
 
+// Tracks other spawns' casts from the server's begin cast messages, which the client only uses for chat.
+void NamePlate::handle_cast_packet(UINT opcode, const char *buffer, UINT len) {
+  auto display = Zeal::Game::get_display();
+  auto self = Zeal::Game::get_self();
+  if (!display) return;
+
+  if (opcode == Zeal::Packets::BeginCast && len >= sizeof(Zeal::Packets::BeginCast_Struct)) {
+    const auto *cast = reinterpret_cast<const Zeal::Packets::BeginCast_Struct *>(buffer);
+    if (self && cast->caster_id == self->SpawnId) return;  // Self uses the client's own timing.
+    if (cast->cast_time > 1)                               // Instant casts are sent as 0 or 1 ms.
+      cast_info_map[cast->caster_id] = {cast->spell_id, display->GameTimeMs, cast->cast_time};
+    else
+      cast_info_map.erase(cast->caster_id);
+  } else if (opcode == Zeal::Packets::Action && len >= sizeof(Zeal::Packets::Action_Struct)) {
+    // The spell landed so the cast is over. A melee proc during the cast has a different spell id.
+    const auto *action = reinterpret_cast<const Zeal::Packets::Action_Struct *>(buffer);
+    auto it = cast_info_map.find(action->source);
+    if (it != cast_info_map.end() && it->second.spell_id == action->spell) cast_info_map.erase(it);
+  } else if (opcode == Zeal::Packets::DeathDamage && len >= sizeof(Zeal::Packets::Death_Struct)) {
+    cast_info_map.erase(reinterpret_cast<const Zeal::Packets::Death_Struct *>(buffer)->spawn_id);
+  }
+}
+
+// Returns -1 if should not display the cast bar at all. Other players are optional since the server only
+// sends their base cast time and the focus and AA reductions are not known to this client.
+int NamePlate::get_cast_percent(const Zeal::GameStructures::Entity *entity) {
+  auto display = Zeal::Game::get_display();
+  if (!entity || !display) return 0;
+  DWORD now = display->GameTimeMs;
+
+  if (entity == Zeal::Game::get_self()) {
+    // The client tracks our own cast with any reductions already applied to CastingTimeout.
+    const auto *actor = entity->ActorInfo;
+    if (!actor || !Zeal::Game::Spells::IsValidSpellIndex(actor->CastingSpellId) || actor->CastingTimeout <= now) {
+      cast_info_map.erase(entity->SpawnId);
+      return 0;
+    }
+    auto it = cast_info_map.find(entity->SpawnId);
+    if (it == cast_info_map.end() || it->second.start_ms + it->second.duration_ms != actor->CastingTimeout)
+      cast_info_map[entity->SpawnId] = {actor->CastingSpellId, now, actor->CastingTimeout - now};  // New cast.
+  } else if (entity->Type != Zeal::GameEnums::NPC &&
+             !(entity->Type == Zeal::GameEnums::Player && setting_cast_bars_players.get())) {
+    return -1;
+  }
+
+  auto it = cast_info_map.find(entity->SpawnId);
+  if (it == cast_info_map.end()) return -1;
+  DWORD elapsed = now - it->second.start_ms;
+  if (it->second.duration_ms == 0 || elapsed >= it->second.duration_ms) {
+    cast_info_map.erase(it);  // Interrupts and fizzles are only sent as chat, so expire on time.
+    return 0;
+  }
+  return std::clamp(100 - static_cast<int>(elapsed * 100 / it->second.duration_ms), 0, 100);
+}
+
 // Returns bearing to target from self from -pi to +pi in the world coordinate system.
 static float get_bearing(const Zeal::GameStructures::Entity *self, const Zeal::GameStructures::Entity *target) {
   if (!self || !target) return 0;
@@ -803,6 +871,17 @@ void NamePlate::render_ui() {
       const char staminabar[4] = {'\n', BitmapFontBase::kStatsBarBackground, BitmapFontBase::kStaminaBarValue, 0};
       full_text += staminabar;
       sprite_font->set_stamina_percent(stamina_percent);
+    }
+    int cast_percent = setting_cast_bars.get() ? get_cast_percent(entity) : -1;
+    if (cast_percent >= 0) {
+      const char castbar[4] = {'\n', BitmapFontBase::kStatsBarBackground, BitmapFontBase::kCastBarValue, 0};
+      full_text += castbar;
+      sprite_font->set_cast_percent(cast_percent);
+    }
+    if (entity == self && setting_tick_bar.get()) {
+      const char tickbar[4] = {'\n', BitmapFontBase::kTickBarValue, 0};  // Draw without a background.
+      full_text += tickbar;
+      sprite_font->set_tick_percent(ZealService::get_instance()->tick->GetTickPercent());
     }
 
     auto nameplate_color = info.color | 0xff000000;
@@ -2257,8 +2336,10 @@ bool NamePlate::handle_zeal_spam_filter(short &channel, std::string &msg) {
   // And do another very simple and quick initial check to bail out early.
   if (msg[start_index] != 'Z') return false;
 
+  if (msg.back() == '\'') end_index -= 1;  // Remove the final ' to avoid parsing spawn id failure.
+  size_t count = end_index - start_index + 1;
   // Then do a full check that it is a valid message (but allow missing spawn for out of zone).
-  std::string contents = msg.substr(start_index, end_index - 1);
+  std::string contents = msg.substr(start_index, count);
   if (!handle_tag_message(contents.c_str(), false, true)) return false;
 
   // Future option: Clean up the messages (strip/translate prefix, merge target name).
