@@ -29,11 +29,12 @@ from the repo source, providing full transparency on the release contents.
 - Additional ui support (new gauges, bag control & locking, looting, spellsets, targetrings,
   nameplates, right click to equip, skill window sorting, ctrl for context menus/looting,
   tagging (text and shapes), raidbars, target of target, etc)
-- Autostand on move/cast, autosit on camp with export inventory/spellbook option,
+- Autostand on move/cast, autosit on camp with export inventory/spellbook/PoP flags option,
   enhanced autorun behavior option
 - Enhanced chat (% replacements, additional filters and colors, tell windows,
   tab completion, copy and paste, per character autojoin channels)
 - Optional enhanced spell info (spells, scrolls, items) on info displays
+- Optional mouseover tooltips for items, spells, buffs and songs
 - Notification sounds (tells, group invites)
 - Third party tool support (silent log messages, direct ZealPipes)
 - Various client bug fixes and patches (crash fixes, helm graphical glitches, etc)
@@ -54,6 +55,7 @@ from the repo source, providing full transparency on the release contents.
 5. `<name>_protected.ini`: Per character saved /protect item list
 6. `<name>_bandolier.ini`: Per character saved /bandolier sets
 7. `<name>-Triggers.txt`: Manually created source for /triggers
+8. `zeal_spell_effects_override.ini`: Optional individual spell effects overrides.
 
 ### Chat % Replacements
 - %n or %mana for mana%
@@ -230,6 +232,7 @@ ___
 
 - `/labels`
   - **Arguments:** `showtargetspawnid` (toggles visibility of the spawn id in the target name eqtype 28)
+  - **Arguments:** `showtargetdistance` (toggles visibility of the target distance (if less than 250) in eqtype 28)
   - **Description:** UI label settings.
 
 - `/lead`
@@ -273,11 +276,26 @@ ___
   - **Description:** controls map enable, size, labels, zoom, and markers
 
 - `/melody`
-  - **Arguments:** `song gem #'s (maximum of 5)`, `resume`
+  - **Arguments:** `song gem #s or bard song click items (maximum of 5)`, `resume`
   - **Aliases:** `/mel`
-  - **Example:** `/melody 1 4 2 3`
+  - **Example:** `/melody 1 4 2 3` - Cycles through spell gems 1, 4, 2, 3.
+  - **Example:** `/melody 1 2 2.3 3` - The third step of the cycle clicks the item in bag 2, slot 3 (`/useitem` numbering).
+  - **Example:** `/melody 1 2 3 0.10 4` - Clicks the item in slot 10 (Ranged, bag = 0 for equipped + `/useitem` numbering).
+  - **Example:** `/melody 1 2 Breath 3` - Clicks the first item clicky whose name starts with `Breath`.
   - **Example:** `/melody resume` - Resumes an interrupted melody at the interrupted song index.
-  - **Description:** plays songs in order until interrupted in any fashion.
+  - **Description:** plays songs in order until interrupted in any fashion. Items with bard song effects
+    are played by the same path as a queued `/useitem` and are selected by using either the inventory
+    location specified by `bag.slot` or by a case sensitive name match.  The `bag.slot` uses bag == 0
+    for the 0-29 equipment locations (ie, `0.10` for the ranged slot) or bag 1-8 for the inventory packs.
+    The name match finds the first clickable item that starts with the search phrase. Use underscores for
+    spaces in item names (`Composers_Chestplate`).
+
+- `/mouseover`
+  - **Arguments:** `on`, `off`, `width [pixels]`, `height [pixels]`, `shiftscroll [always|smart]`
+  - **Example:** `/mouseover width 400` sets the maximum tooltip width to 400 pixels.
+  - **Example:** `/mouseover height 0` resets the maximum tooltip height to the default.
+  - **Example:** `/mouseover shiftscroll smart` lets the mouse wheel scroll tooltips without Shift, unless the parent window has a scroll bar (e.g. Merchant window).
+  - **Description:** Toggles mouseover tooltips and shows or sets their maximum size. By default, shift + mouse wheel scrolls long tooltips.
 
 - `/mystats`
   - **Arguments:** `none`, `info`, `<item_link>`
@@ -286,7 +304,8 @@ ___
 
 - `/nameplate`
   - **Arguments:** `colors`, `concolors`, `targetcolor`, `charselect`, `hideself`, `x`, `hideraidpets`, `showpetownername`, `targetmarker`, `targethealth`, `inlineguild`
-  - **Description:** toggles nameplate modes for adjusting colors (tints) and text
+  - **Arguments:** `targetblink`, `attackonly`, `healthbars`, `manabars`, `tickbar`, `castbars`, `castbarsplayers`, `zealfont`, `dropshadow`, `extendedshownames`
+  - **Description:** toggles nameplate modes for adjusting colors (tints), text, and font as well as enabling hp and mana bars
 
 - `/optchat`
   - **Arguments:** `rs`, `gs`, `rsgs` (sends to raid if in raid else group if in group)
@@ -295,11 +314,15 @@ ___
 
 - `/outputfile`
   - **Aliases:** `/output`, `/out`
-  - **Arguments:** `inventory | spellbook | raidlist` `[optional_filename]`, `format [0 | 1]`
+  - **Arguments:** `inventory | spellbook | quarmy | popflags | raidlist` `[optional_filename]`, `format [0 | 1]`, `hidepopflags`, `popflagsoncamp`
   - **Example:** `/outputfile inventory my_inventory`
   - **Description:**
     - `inventory` outputs information about your equipment, inventory bag slots, held item, and bank slots to a file.
     - `spellbook` outputs a list of all spell ids current scribed in your spellbook.
+    - `popflags` sends `#popflags` and `#popflags 1` to `5` and saves the lines the server answers with to
+      `<name>-PoPFlags.txt` about 3 seconds later (nothing is written if the server does not answer). The reply
+      also shows in chat. Also done by the "Export data on /camp" option if `popflagsoncamp` is on.
+    - `hidepopflags` toggles hiding the reply's own lines in chat (default off).
     - `raidlist` outputs a raid 'tick' with a list of players in the raid.
     - `format` sets the format of the export files (0 = default, 1 = new style with host tag)
 
@@ -351,6 +374,7 @@ ___
                    `clickable <on | off>`: Enables or disables click targeting with raidbars \
                    `groups <on | off | toggle>`: Switches between listing by class prioritization or by groups \
                    `showall <on | off>`: Class mode: Disables health thresholding, Group mode: Shows empty slots \
+                   `autoregroup <on | off>`: Auto-regroups raid members to their former group when they rejoin the raid \
                    `never <classes list>`: Never shows classes in the list (class prio mode only) \
                    `always <classes list>`: Like showall but only applies to classes in list (class prio mode only) \
                    `priority <classes list>`: Sets listing order of classes (class prio mode only) \
@@ -447,13 +471,21 @@ ___
   - **Example:** `/sq` `/sq 1 2`
   - **Description:** sorts your current group members in the ui  using /sq 1 2 will swap players 1 and 2 in your group on your ui.
 
-- `/spelleffects`
-  - **Arguments:** `nosprites`, `bard <0, 1, 2, 3>`
+- `/spelleffects`, `/spellfx`
+  - **Arguments:** `nosprites`, `bard <0, 1, 2, 3>`, `list`, `classic`, `default`, `<buff | heal> <classic | default | global>`, `lookup`, `override <Target Spell ID> <classic | default | Source Spell ID | reset>`, `override reset`
+  - **Description:** Allows preventing the dpvs.dll crash and modifying spell effects.  Players may copy the effects for an individual spell from another source spell, change all spell effects to the classic ("old") style, or revert all changes to the deafult ("new") visuals used by the client. They optionally may change all 482 spells that have the "self-buff" effects to classic, which restores level milestone particle effects at levels 1, 24, and 39 (e.g. Minor Shielding just having green particles at level 1, green + orange at 24 which is used by default on Quarm regardless of level, and green + orange + blue particles at level 39).
   - **Example:** `/spelleffects nosprites`: Disables the minor sprite enhancement of the 180 songs (out of 4000)
     that can cause the dpvs.dll crash when `/showspelleffects on` is enabled
   - **Example:** `/spelleffects bard`: Sets the effects mode (0 = default, 1, 2, 3 = alternatives) of 14 bard songs
-    (mostly resists and mana regen) to optionally be more subtle (0 is invisible with /showspelleffects off).
-  - **Description:** allows you to modify spell effects
+    (mostly resists and mana regen) to optionally be more subtle (0 is invisible with /showspelleffects off). Not affected by replace changes.
+  - **Example:** `/spelleffects classic`: Changes the global spell effects to use the classic ("old") style with working particle level milestones at levels 1, 24, and 39.
+  - **Example:** `/spelleffects default`: Reverts the global spell effects to the modern ("new) style used by default by the client. Level milestone particle effects for most spells are locked at level 24 regardless of character level.
+  - **Example:** `/spelleffects buff classic`: Changes spell effects only for the effects commonly associated with the shielding buff category (e.g. Minor Shielding, Shield of the Magi, Dead Man Floating, Rune III, etc.) to the classic ("old") style with working particle level milestones at levels 1 (green particles), 24 (green + orange), and 39 (green + orange + blue).
+  - **Example:** `/spelleffects heal default`: Reverts spell effects only for the effects commonly associated with the healing and regen category (e.g. Minor Healing, Complete Healing, Chloroplast, etc.) to the default ("new") style. Level milestone particle effects for all heals in this category will remain at level 1 regardless of level (simple blue particles from the hand).
+  - **Example:** `/spelleffects lookup Ice C`: Returns the spell ids for all spells that have names that start with "Ice C" (like Ice Comet = 732).
+  - **Example:** `/spelleffects override 732 classic`: Sets spell id 732's effects to use classic (overrides global setting)
+  - **Example:** `/spelleffects override 732 384`: Sets spell id 732 to use the effects from 384 (uses classic or default based on current global setting)
+  - **Example:** `/spelleffects override reset`: Reverts all individual spell override to use the global / group settings.
 
 - `/spellset`
   - **Arguments:** `save <name>`, `load <name>`, `delete <name>`, `list`
@@ -857,6 +889,9 @@ ___
   - `84` Count of all inventory slots
   - `85` Count of filled inventory slots
   - `86` AA Exp Per Hour Percent
+  - `87` Distance to target (blank when there is no target or it is 250 or more units away)
+  - `88` Target level (blank for corpses and /anonymous or /roleplay players)
+  - `89` Target class, short form such as `WAR` (blank for corpses and /anonymous or /roleplay players)
   - `124` Current Mana
   - `125` Max Mana
   - `134` Spell being casted
@@ -911,12 +946,40 @@ this, since it identifies a live entity rather than a database row.
 - `target_name` - trimmed name, matching what eqtype 28 shows by default
 - `target_type` - 0 player, 1 NPC, 2 NPC corpse, 3 player corpse
 - `target_level`, `target_class`, `target_race` - the client's spawn descriptors
+- `target_texture`, `target_gender`, `target_size` - how the target is rendered: body texture,
+  gender and model size (height scale). Two spawns with the same name, level, class and race
+  can still be separate database rows that differ only in these.
+- `target_equipment` - array of 9 values: the rendered material of the head, chest, arms, wrist,
+  hands, legs and feet slots, then the primary and secondary item types.
 - `target_loc` - the target's current position, same `{x, y, z}` shape as `location`.
   Only included while the target is within 250 units of the player; omitted otherwise
 
 These are omitted along with `target_id` when there is no target. `target_name`
 is provided so that a consumer never has to parse eqtype 28, whose text is
 formatting dependent (see `/labels showtargetspawnid`).
+
+#### Death events
+A `death` message (type 7) is sent for every death the client is told about, which is every death in
+the zone. The chat log only shows a "has been slain" message for some of them, so a consumer that
+tracks spawns (for example timers on mobs) cannot rely on the log to know when a spawn is gone.
+
+```json
+{ "spawn_id": 1234, "name": "a gnoll pup", "type": 1, "level": 12, "killer_id": 567, "killer_name": "Soandso" }
+```
+
+- `spawn_id` - the spawn id of the entity that died, matching `target_id` and the roster `spawn_id`s
+- `name`, `type`, `level` - as for the target descriptors; omitted if the client did not know the spawn
+- `killer_id` - the killer's spawn id, or 0 when the server reported no killer (e.g. a damage over time tick)
+- `killer_name` - omitted when there is no killer or the client did not know it
+
+#### Item displays
+An `item` message (type 8) is sent each time an item display window is filled: clicking an item
+link in chat, or inspecting an item in an inventory, bank, loot or merchant slot. It carries only
+what the window itself shows, so a consumer can look the item up in its own database.
+
+```json
+{ "item_id": 13073, "name": "Bone Chips" }
+```
 
 ---
 ### Tick Timer
@@ -989,6 +1052,15 @@ The Zeal Nameplate options tab is the primary interface, but the redundant comma
 * `/nameplate inlineguild` - Toggles guild name appearing inline or on a separate line
 * `/nameplate zealfont` - Toggles internal client or custom Zeal fonts
 * `/nameplate dropshadow` - Toggles drop shadowing on Zeal fonts
+* `/nameplate castbars` - Toggles a cast progress bar under NPC nameplates and your own (Zeal fonts only)
+  - Your own bar uses the client's cast timer, so haste, focus and AA reductions are included.
+  - NPC bars use the base cast time the server sends with the "begins to cast" message, so an NPC
+    with a cast time reduction (e.g. a level 51+ hybrid class casting a detrimental spell) finishes
+    early and the bar clears when the spell lands. An interrupted or fizzled cast is only reported
+    in chat, so its bar runs until the base cast time ends.
+* `/nameplate castbarsplayers` - Also shows cast bars for other players (requires `castbars`)
+  - Player bars use the base cast time too, but player focus effects and AAs are not known to the
+    client, so a reduced cast finishes before the bar does. The bar clears when the spell lands.
 * `/nameplate extendedshownames` - Toggles availability of /Shownames 5, /Shownames 6, and /Shownames 7
 
 #### Changing the Color of Nameplates
