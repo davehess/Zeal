@@ -83,9 +83,11 @@
     <ClInclude Include="items.h" />
     <ClInclude Include="json.hpp" />
     <ClInclude Include="helm_manager.h" />
+    <ClInclude Include="hide_ui_cursor.h" />
     <ClInclude Include="music.h" />
     <ClInclude Include="raid_bars.h" />
     <ClInclude Include="raid_bars_manage.h" />
+    <ClInclude Include="spell_effects.h" />
     <ClInclude Include="survey.h" />
     <ClInclude Include="tag_arrows.h" />
     <ClInclude Include="tick.h" />
@@ -111,6 +113,7 @@
     <ClInclude Include="tooltip.h" />
     <ClInclude Include="ui_bank.h" />
     <ClInclude Include="item_display.h" />
+    <ClInclude Include="mouseover_display.h" />
     <ClInclude Include="melody.h" />
     <ClInclude Include="player_movement.h" />
     <ClInclude Include="binds.h" />
@@ -169,10 +172,12 @@
     <ClCompile Include="equip_item.cpp" />
     <ClCompile Include="floating_damage.cpp" />
     <ClCompile Include="helm_manager.cpp" />
+    <ClCompile Include="hide_ui_cursor.cpp" />
     <ClCompile Include="items.cpp" />
     <ClCompile Include="music.cpp" />
     <ClCompile Include="raid_bars.cpp" />
     <ClCompile Include="raid_bars_manage.cpp" />
+    <ClCompile Include="spell_effects.cpp" />
     <ClCompile Include="survey.cpp" />
     <ClCompile Include="tag_arrows.cpp" />
     <ClCompile Include="tick.cpp" />
@@ -198,6 +203,7 @@
     <ClCompile Include="tooltip.cpp" />
     <ClCompile Include="ui_bank.cpp" />
     <ClCompile Include="item_display.cpp" />
+    <ClCompile Include="mouseover_display.cpp" />
     <ClCompile Include="melody.cpp" />
     <ClCompile Include="player_movement.cpp" />
     <ClCompile Include="binds.cpp" />
