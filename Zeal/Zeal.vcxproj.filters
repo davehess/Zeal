@@ -240,6 +240,9 @@
     <ClInclude Include="helm_manager.h">
       <Filter>Header Files\hooks</Filter>
     </ClInclude>
+    <ClInclude Include="hide_ui_cursor.h">
+      <Filter>Header Files\other</Filter>
+    </ClInclude>
     <ClInclude Include="music.h">
       <Filter>Header Files\hooks</Filter>
     </ClInclude>
@@ -311,6 +314,12 @@
     </ClInclude>
     <ClInclude Include="bandolier.h">
       <Filter>Header Files\hooks</Filter>
+    </ClInclude>
+    <ClInclude Include="mouseover_display.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="spell_effects.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -419,7 +428,7 @@
     <ClCompile Include="ui_guild.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
-        <ClCompile Include="ui_hide_fake_slots.cpp">
+    <ClCompile Include="ui_hide_fake_slots.cpp">
       <Filter>Source Files\ui</Filter>
     </ClCompile>
     <ClCompile Include="named_pipe.cpp">
@@ -478,6 +487,9 @@
     </ClCompile>
     <ClCompile Include="helm_manager.cpp">
       <Filter>Source Files\hooks</Filter>
+    </ClCompile>
+    <ClCompile Include="hide_ui_cursor.cpp">
+      <Filter>Source Files\other</Filter>
     </ClCompile>
     <ClCompile Include="ui_buff.cpp">
       <Filter>Source Files\ui</Filter>
@@ -547,6 +559,12 @@
     </ClCompile>
     <ClCompile Include="bandolier.cpp">
       <Filter>Source Files\hooks</Filter>
+    </ClCompile>
+    <ClCompile Include="mouseover_display.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="spell_effects.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
