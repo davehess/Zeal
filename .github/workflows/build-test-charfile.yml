@@ -1,0 +1,82 @@
+# Compile check for the per-character settings file opt-in (feat/char-settings-files) on Zeal v1.5.0-alpha0.
+# Lives only on test-charfile, so it never rides into the feature branch that Wolf Pack Zeal cherry-picks from.
+# Every push rebuilds and replaces the zip on the rolling `test-charfile-build` prerelease.
+
+name: Build test-charfile
+
+on:
+  push:
+    branches: [test-charfile]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-test-charfile
+  cancel-in-progress: true
+
+env:
+  SOLUTION_FILE_PATH: ./Zeal.sln
+  RELEASE_TAG: test-charfile-build
+
+jobs:
+  build:
+    name: Build and publish the test-charfile prerelease
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Short hash for the build label
+        id: git
+        shell: bash
+        run: echo "short_hash=$(git rev-parse --short "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+
+      - name: Build the Zeal solution
+        env:
+          ZEAL_BUILD_VERSION: charfile-${{ steps.git.outputs.short_hash }}
+        run: |
+          msbuild /m /p:Configuration=Release /p:Platform=x86 /p:zeal_build_version=$env:ZEAL_BUILD_VERSION /p:LanguageStandard=stdcpp20 $env:SOLUTION_FILE_PATH /p:ExportHeader="" /p:ScanDependencies=""
+
+      - name: Zip the build (same contents as an upstream release)
+        shell: pwsh
+        run: |
+          7z a -tzip zeal_test-charfile.zip ./Release/Zeal.asi ./Release/Zeal.pdb ./Zeal/uifiles README.md
+          7z rn zeal_test-charfile.zip README.md Zeal_README.md
+
+      - name: Keep the zip on the run too
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeal_test-charfile_${{ steps.git.outputs.short_hash }}
+          path: zeal_test-charfile.zip
+
+      - name: Move the release tag to this commit
+        shell: bash
+        run: |
+          git tag -f "$RELEASE_TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$RELEASE_TAG"
+
+      - name: Publish the rolling prerelease
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ env.RELEASE_TAG }}
+          name: test-charfile (${{ steps.git.outputs.short_hash }})
+          commit: ${{ github.sha }}
+          prerelease: true
+          makeLatest: false
+          allowUpdates: true
+          removeArtifacts: true
+          artifacts: zeal_test-charfile.zip
+          artifactContentType: application/zip
+          artifactErrorsFailBuild: true
+          body: |
+            Test build of the fork's test-charfile branch (commit ${{ github.sha }}): Zeal v1.5.0-alpha0 plus the opt-in
+            per-character settings file. Not an official Zeal release, and not part of Wolf Pack Zeal yet.
+            Turn it on in game with: /zeal charfile on  (off: /zeal charfile off). Your character's own Zeal settings
+            then live in <Name>_zeal.ini in the EverQuest folder; zeal.ini keeps its old copy.
+            Install: copy Zeal.asi into the EverQuest folder and merge uifiles/ over yours. Zeal's options window
+            shows the build as "charfile-${{ steps.git.outputs.short_hash }}".
