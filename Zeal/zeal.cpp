@@ -64,6 +64,7 @@
 #include "ui_manager.h"
 #include "ui_skin.h"
 #include "utils.h"
+#include "zeal_settings.h"
 #include "zone_map.h"
 
 extern HMODULE this_module;
@@ -513,7 +514,19 @@ void ZealService::AddCommands() {
 
   commands_hook->Add("/zeal", {"/zea"}, "Help and version information.", [this](std::vector<std::string> &args) {
     if (args.size() == 1) {
-      Zeal::Game::print_chat("Available args: version, help");  // leave room for more args on this command for later
+      Zeal::Game::print_chat("Available args: version, charfile, help");  // leave room for more args for later
+      return true;
+    }
+    if (args.size() > 1 && Zeal::String::compare_insensitive(args[1], "charfile")) {
+      if (args.size() == 3 && (Zeal::String::compare_insensitive(args[2], "on") ||
+                               Zeal::String::compare_insensitive(args[2], "off"))) {
+        bool enable = Zeal::String::compare_insensitive(args[2], "on");
+        ZealCharSettingsFile::set_enabled(enable);
+        Zeal::Game::print_chat("Character settings file (<Name>_zeal.ini) %s.", enable ? "enabled" : "disabled");
+      } else {
+        Zeal::Game::print_chat("Usage: /zeal charfile on|off (currently %s)",
+                               ZealCharSettingsFile::is_enabled() ? "on" : "off");
+      }
       return true;
     }
     if (args.size() > 1 && Zeal::String::compare_insensitive(args[1], "version")) {

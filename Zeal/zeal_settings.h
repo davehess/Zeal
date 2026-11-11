@@ -4,6 +4,15 @@
 #include <functional>
 #include <string>
 
+// Opt-in (zeal.ini [Zeal] CharacterSettingsFile, default off) to keep the per character ZealSetting values in a
+// "<Name>_zeal.ini" file in the game folder instead of "<Section>_<Name>" sections in the shared zeal.ini.
+namespace ZealCharSettingsFile {
+bool is_enabled();
+// Persists the option. When enabled, also creates the current character's file (if needed) by copying the
+// character's current values from zeal.ini (skipped if the character name is not known yet).
+void set_enabled(bool enable);
+}  // namespace ZealCharSettingsFile
+
 template <typename T>
 class ZealSetting {
  public:
