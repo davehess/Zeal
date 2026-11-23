@@ -37,6 +37,12 @@ class NamePlate {
     PvpAlly = 31,
   };
 
+  // Modes of setting_tag_guild_marks (/tag guildmarks): off hides every guild icon, including ones
+  // other players tagged; tagged shows only tagged marks; auto adds each player's own guild icon.
+  static constexpr int kGuildMarksOff = 0;
+  static constexpr int kGuildMarksTagged = 1;
+  static constexpr int kGuildMarksAuto = 2;
+
   NamePlate(class ZealService *zeal);
   ~NamePlate();
 
@@ -61,7 +67,9 @@ class NamePlate {
   ZealSetting<bool> setting_tag_prettyprint = {false, "Zeal", "NameplateTagPrettyPrint", false};
   ZealSetting<bool> setting_tag_default_arrow = {true, "Zeal", "NameplateTagDefaultArrow", false};
   ZealSetting<bool> setting_tag_persist = {false, "Zeal", "NameplateTagPersist", false};
+  ZealSetting<bool> setting_tag_shapes = {false, "Zeal", "NameplateTagShapes", false};
   ZealSetting<bool> setting_tag_alternate_symbols = {false, "Zeal", "NameplateTagAlternateSymbols", false};
+  ZealSetting<int> setting_tag_guild_marks = {kGuildMarksTagged, "Zeal", "NameplateTagGuildMarks", false};
   ZealSetting<std::string> setting_tag_channel = {"", "Zeal", "NameplateTagChannel", false};
 
   // Text settings.
@@ -133,6 +141,9 @@ class NamePlate {
     DWORD tag_color;
     bool corpse_tag = false;  // The tag was set on the corpse (a tag from before the death stays hidden).
     bool tag_synced = false;  // Matched against the saved tags since this entry was created.
+    std::string tag_image;       // Lower-case key of the tag's picture ("ieur" for EUR.png).
+    std::string tag_image_file;  // That picture's file, resolved when the tag is applied ("" if none).
+    bool guild_mark = false;     // The tag_color came from a guild icon key (^I..^).
   };
 
   struct SavedTag {
@@ -185,13 +196,24 @@ class NamePlate {
   void load_saved_tags();
   void write_saved_tags();
 
+  // What auto mode draws for a guild: its icon's tag color and its picture file ("" if none).
+  struct GuildMark {
+    DWORD color = 0;
+    std::string image_file;
+  };
+
+  const GuildMark *get_auto_guild_mark(const Zeal::GameStructures::Entity &entity,
+                                       const Zeal::GameStructures::Entity *self);
+
   void clean_ui();
   void render_ui();
   void load_sprite_font();
 
   std::unique_ptr<SpriteFont> sprite_font;
   std::unique_ptr<class TagArrows> tag_arrows;
+  bool tag_arrows_icon_shapes = false;  // Whether tag_arrows was built with the icon shapes.
   std::unordered_map<struct Zeal::GameStructures::Entity *, NamePlateInfo> nameplate_info_map;
+  std::unordered_map<short, GuildMark> guild_mark_cache;  // By guild id (color Off if the guild is not in kGuilds).
   std::unordered_map<WORD, CastInfo> cast_info_map;  // Active casts keyed by spawn id.
   std::function<void()> update_options_ui_callback;
   std::function<unsigned int(int)> get_color_callback;

@@ -1,9 +1,19 @@
 #include "tag_arrows.h"
 
+#include <algorithm>
 #include <array>
+#include <filesystem>
+#include <format>
+#include <fstream>
 #include <span>
 
 #include "game_functions.h"
+
+// Tag pictures: the file is checked before it is decoded, and the picture stands about as tall as the arrow.
+static constexpr uintmax_t kMaxImageFileBytes = 1024 * 1024;
+static constexpr unsigned int kMaxImagePixels = 128;  // On either side.
+static constexpr float kImageHeight = 3.5f;           // World units (the arrow is 4 tall).
+static constexpr float kMaxImageAspect = 2.f;         // Wider pictures are squeezed to twice their height.
 
 // Arrow consists of 3 circles with a vertex at the tip.
 static constexpr int kNumCircleVertices = 60;                         // Spaced every 6 degrees.
@@ -120,7 +130,8 @@ class Gradient {
   float max_h;
 };
 
-TagArrows::TagArrows(IDirect3DDevice8 &device) : device(device) {
+TagArrows::TagArrows(IDirect3DDevice8 &device, bool with_icon_shapes)
+    : device(device), build_icon_shapes(with_icon_shapes) {
   CalculateShapes();  // Precalculate the arrow and other shapes.
 }
 
@@ -136,6 +147,14 @@ void TagArrows::Release() {
   index_buffer = nullptr;
 
   arrow_queue.clear();
+  ForgetImages();
+}
+
+void TagArrows::ForgetImages() {
+  for (auto &[filename, image] : images)
+    if (image.texture) image.texture->Release();
+  images.clear();
+  image_queue.clear();
 }
 
 void TagArrows::Dump() const {
@@ -152,12 +171,74 @@ void TagArrows::QueueTagShape(const Vec3 &position, const D3DCOLOR color, Shape 
   arrow_queue.emplace_back(Arrow{.position = position, .color = color, .shape = shape, .bearing = bearing});
 }
 
+bool TagArrows::QueueTagImage(const Vec3 &position, const std::string &filename) {
+  auto it = images.find(filename);
+  if (it == images.end()) it = images.emplace(filename, ReadImageFile(filename)).first;
+  if (!it->second.texture) return false;
+  image_queue.push_back(
+      Image{.position = position, .texture = it->second.texture, .width = kImageHeight * it->second.aspect});
+  return true;
+}
+
+// Reads a picture's size from its header (a PNG's IHDR, or a true-color TGA's header), so an oversized file
+// is refused before it is decoded. Returns false for anything that isn't one of those.
+static bool ReadImageSize(const std::string &filename, unsigned int &width, unsigned int &height) {
+  std::ifstream file(filename, std::ios::binary);
+  std::array<unsigned char, 24> header = {};
+  if (!file.read(reinterpret_cast<char *>(header.data()), header.size())) return false;
+  static constexpr std::array<unsigned char, 8> kPngSignature = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+  if (std::equal(kPngSignature.begin(), kPngSignature.end(), header.begin())) {
+    auto big_endian = [&](int i) {
+      return (static_cast<unsigned int>(header[i]) << 24) | (header[i + 1] << 16) | (header[i + 2] << 8) |
+             header[i + 3];
+    };
+    width = big_endian(16);
+    height = big_endian(20);
+    return true;
+  }
+  if (header[2] != 2 && header[2] != 10) return false;  // TGA image type: true-color, plain or run-length.
+  width = header[12] | (header[13] << 8);
+  height = header[14] | (header[15] << 8);
+  return true;
+}
+
+TagArrows::LoadedImage TagArrows::ReadImageFile(const std::string &filename) {
+  std::error_code error;
+  const uintmax_t bytes = std::filesystem::file_size(filename, error);
+  unsigned int width = 0, height = 0;
+  if (error || bytes == 0 || bytes > kMaxImageFileBytes || !ReadImageSize(filename, width, height) || width == 0 ||
+      height == 0 || width > kMaxImagePixels || height > kMaxImagePixels) {
+    pending_messages.push_back(std::format(
+        "Tag picture skipped (needs a PNG or TGA, up to {} pixels a side and 1 MB): {}", kMaxImagePixels, filename));
+    return {};
+  }
+  IDirect3DTexture8 *texture = nullptr;
+  if (FAILED(D3DXCreateTextureFromFileExA(&device, filename.c_str(), D3DX_DEFAULT, D3DX_DEFAULT, D3DX_DEFAULT, 0,
+                                          D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, D3DX_DEFAULT, D3DX_DEFAULT, 0, nullptr,
+                                          nullptr, &texture))) {
+    pending_messages.push_back("Tag picture failed to load: " + filename);
+    return {};
+  }
+  return LoadedImage{.texture = texture, .aspect = min(kMaxImageAspect, static_cast<float>(width) / height)};
+}
+
+// Messages are held until drawing is done: printing to the chat window mid-frame is a hitch.
 void TagArrows::FlushQueueToScreen() {
+  FlushQueues();
+  for (const auto &message : pending_messages) Zeal::Game::print_chat("%s", message.c_str());
+  pending_messages.clear();
+}
+
+void TagArrows::FlushQueues() {
+  if (!image_queue.empty()) {  // Pictures need none of the shape buffers below.
+    RenderImages();
+    image_queue.clear();
+  }
   if (arrow_queue.empty()) return;
 
   if (!vertex_buffer) {
     render_infos.clear();
-    if (FAILED(device.CreateVertexBuffer(kBufferVertices * sizeof(ArrowVertex), D3DUSAGE_WRITEONLY | D3DUSAGE_DYNAMIC,
+    if (FAILED(device.CreateVertexBuffer(buffer_vertices * sizeof(ArrowVertex), D3DUSAGE_WRITEONLY | D3DUSAGE_DYNAMIC,
                                          ArrowVertex::kFvfCode, D3DPOOL_DEFAULT, &vertex_buffer))) {
       vertex_buffer = nullptr;  // Ensure nullptr.
       Release();                // Do a full cleanup.
@@ -194,6 +275,7 @@ void TagArrows::RenderQueue() {
   D3DXMATRIX originalWorldMatrix;
   device.GetTransform(D3DTS_WORLD, &originalWorldMatrix);  // Stashing this for restoration.
 
+  bool failed = false;
   D3DXMATRIX translationMatrix;
   for (const auto &entry : arrow_queue) {
     // Retrieve the color dependent set of arrow model vertices.
@@ -211,8 +293,8 @@ void TagArrows::RenderQueue() {
     device.SetTransform(D3DTS_WORLD, &translationMatrix);
 
     if (render_info.start_vertex_index < 0) {
-      Release();
-      return;
+      failed = true;  // Fall through to the state restoration below before releasing.
+      break;
     }
 
     device.SetIndices(index_buffer, render_info.start_vertex_index);
@@ -224,6 +306,66 @@ void TagArrows::RenderQueue() {
   device.SetStreamSource(0, NULL, 0);  // Unbind vertex buffer.
   device.SetIndices(NULL, 0);          // Ensure index_buffer is no longer bound.
   device.SetTransform(D3DTS_WORLD, &originalWorldMatrix);
+  render_state.restore_state();
+  if (failed) Release();
+}
+
+// Draws each queued picture as a quad that faces the camera, the same way the nameplate text does.
+void TagArrows::RenderImages() {
+  D3DRenderStateStash render_state(device);
+  render_state.store_and_modify({D3DRS_CULLMODE, D3DCULL_NONE});
+  render_state.store_and_modify({D3DRS_ALPHABLENDENABLE, TRUE});
+  render_state.store_and_modify({D3DRS_SRCBLEND, D3DBLEND_SRCALPHA});
+  render_state.store_and_modify({D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA});
+  render_state.store_and_modify({D3DRS_ALPHATESTENABLE, TRUE});  // Clear pixels leave the depth buffer alone.
+  render_state.store_and_modify({D3DRS_ALPHAREF, 0x08});
+  render_state.store_and_modify({D3DRS_ALPHAFUNC, D3DCMP_GREATER});
+  render_state.store_and_modify({D3DRS_ZENABLE, TRUE});
+  render_state.store_and_modify({D3DRS_ZWRITEENABLE, TRUE});
+  render_state.store_and_modify({D3DRS_LIGHTING, FALSE});
+
+  D3DTextureStateStash texture_state(device);
+  texture_state.store_and_modify({D3DTSS_COLOROP, D3DTOP_MODULATE});
+  texture_state.store_and_modify({D3DTSS_COLORARG1, D3DTA_TEXTURE});
+  texture_state.store_and_modify({D3DTSS_COLORARG2, D3DTA_DIFFUSE});
+  texture_state.store_and_modify({D3DTSS_ALPHAOP, D3DTOP_MODULATE});
+  texture_state.store_and_modify({D3DTSS_ALPHAARG1, D3DTA_TEXTURE});
+  texture_state.store_and_modify({D3DTSS_ALPHAARG2, D3DTA_DIFFUSE});
+  texture_state.store_and_modify({D3DTSS_MINFILTER, D3DTEXF_LINEAR});
+  texture_state.store_and_modify({D3DTSS_MAGFILTER, D3DTEXF_LINEAR});
+  texture_state.store_and_modify({D3DTSS_MIPFILTER, D3DTEXF_LINEAR});  // Smaller copies for distant tags.
+  texture_state.store_and_modify({D3DTSS_ADDRESSU, D3DTADDRESS_CLAMP});
+  texture_state.store_and_modify({D3DTSS_ADDRESSV, D3DTADDRESS_CLAMP});
+
+  // Note: Not preserving shader or texture to avoid reference counting.
+  device.SetVertexShader(ImageVertex::kFvfCode);
+
+  D3DXMATRIX original_world, view, face_camera, translation, world;
+  device.GetTransform(D3DTS_WORLD, &original_world);
+  device.GetTransform(D3DTS_VIEW, &view);
+  D3DXMatrixIdentity(&face_camera);  // Transpose the rotation of the camera view (as SpriteFont does).
+  for (int row = 0; row < 3; row++)
+    for (int col = 0; col < 3; col++) face_camera(col, row) = view(row, col);
+
+  constexpr D3DCOLOR kWhite = 0xffffffff;  // Untinted.
+  for (const auto &image : image_queue) {
+    // Model y runs down the picture, as the nameplate text is laid out, so the picture spans y from
+    // -kImageHeight (its top) to 0 (its bottom, at the position).
+    const float half = image.width / 2;
+    const ImageVertex vertices[4] = {{-half, -kImageHeight, 0, kWhite, 0, 0},
+                                     {half, -kImageHeight, 0, kWhite, 1, 0},
+                                     {-half, 0, 0, kWhite, 0, 1},
+                                     {half, 0, 0, kWhite, 1, 1}};
+    D3DXMatrixTranslation(&translation, image.position.x, image.position.y, image.position.z);
+    world = face_camera * translation;
+    device.SetTransform(D3DTS_WORLD, &world);
+    device.SetTexture(0, image.texture);
+    device.DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, vertices, sizeof(ImageVertex));
+  }
+
+  device.SetTexture(0, NULL);  // Release the reference to the last picture.
+  device.SetTransform(D3DTS_WORLD, &original_world);
+  texture_state.restore_state();
   render_state.restore_state();
 }
 
@@ -241,7 +383,7 @@ TagArrows::RenderInfo TagArrows::GetRenderInfo(const Arrow &tag) {
     case Shape::Paw:
       return AllocatePaw(tag);
     default:
-      return RenderInfo();
+      return AllocateIconShape(tag);  // Icon shapes and numbered badges (range checked there).
   }
 }
 
@@ -252,7 +394,7 @@ int TagArrows::AppendVertices(std::vector<ArrowVertex> &vertices) {
     start_vertex_index = render_infos.back().start_vertex_index + render_infos.back().num_vertices;
   }
 
-  if (start_vertex_index + vertices.size() > kBufferVertices) {
+  if (start_vertex_index + vertices.size() > buffer_vertices) {
     start_vertex_index = 0;
     render_infos.clear();  // Flush cache.
   }
@@ -274,12 +416,14 @@ int TagArrows::AppendVertices(std::vector<ArrowVertex> &vertices) {
 // Calculate the fixed relative locations of the vertices with a default color that is updated later.
 void TagArrows::CalculateShapes() {
   indices.clear();
+  buffer_vertices = kBufferVertices;
   CalculateArrowVertices();
   AppendArrowIndices();
   CalculateOctagonVertices();
   AppendOctagonIndices();
   CalculatePawVertices();
   AppendPawIndices();
+  if (build_icon_shapes) CalculateIconShapes();
 }
 
 void TagArrows::CalculateArrowVertices() {
@@ -545,6 +689,92 @@ TagArrows::RenderInfo TagArrows::AllocatePaw(const Arrow &tag) {
                                        .num_vertices = paw_vertices.size(),
                                        .start_index = paw_index_start,
                                        .num_primitives = paw_primitive_count,
+                                       .bearing = tag.bearing});
+  return render_infos.back();
+}
+
+void TagArrows::CalculateIconShapes() {
+  for (size_t i = 0; i < icon_shapes.size(); ++i) {
+    auto &icon = icon_shapes[i];
+    icon.mesh = TagShapes::Build(static_cast<TagShapes::Kind>(i));
+    icon.index_start = indices.size();
+    indices.insert(indices.end(), icon.mesh.indices.begin(), icon.mesh.indices.end());
+    icon.primitive_count = (icon.mesh.indices.size() > 2) ? icon.mesh.indices.size() - 2 : 0;
+    buffer_vertices += icon.mesh.vertices.size();  // Room for every icon shape at once.
+  }
+}
+
+// Lightens a color toward white for the accent parts (the sword's blade, the diamond's facet, etc).
+static D3DCOLOR LightenColor(D3DCOLOR color) {
+  auto lighten = [](int c) { return c + (255 - c) * 3 / 5; };
+  return D3DCOLOR_XRGB(lighten((color >> 16) & 0xFF), lighten((color >> 8) & 0xFF), lighten(color & 0xFF));
+}
+
+// The icon shapes index TagShapes::Kind by their offset from Shape::Skull, so the two enums must line up.
+static_assert(static_cast<int>(TagArrows::Shape::Number1) - static_cast<int>(TagArrows::Shape::Skull) ==
+              static_cast<int>(TagShapes::Kind::Number1));
+static_assert(static_cast<int>(TagArrows::Shape::Glyph0) - static_cast<int>(TagArrows::Shape::Skull) ==
+              static_cast<int>(TagShapes::Kind::Glyph0));
+static_assert(static_cast<int>(TagArrows::Shape::GuildIcon0) - static_cast<int>(TagArrows::Shape::Skull) ==
+              static_cast<int>(TagShapes::Kind::GuildIcon0));
+static_assert(static_cast<int>(TagArrows::Shape::GuildIconLast) - static_cast<int>(TagArrows::Shape::Skull) + 1 ==
+              static_cast<int>(TagShapes::Kind::Count));
+
+static constexpr D3DCOLOR kEyeYellow = D3DCOLOR_XRGB(0xff, 0xcf, 0x5c);  // The Wolf Pack wolf's eyes.
+
+TagArrows::RenderInfo TagArrows::AllocateIconShape(const Arrow &tag) {
+  const int index = static_cast<int>(tag.shape) - static_cast<int>(Shape::Skull);
+  if (index < 0 || index >= static_cast<int>(icon_shapes.size())) return RenderInfo();
+  const auto &icon = icon_shapes[index];
+  if (icon.mesh.vertices.empty() || !icon.primitive_count) return RenderInfo();
+
+  // The same face gradients as the octagon and paw, plus a light and a dark accent tone.
+  const float min_z = icon.mesh.min_z;
+  const float max_z = icon.mesh.max_z;
+  const D3DCOLOR light = LightenColor(tag.color);
+  const D3DCOLOR dark =
+      D3DCOLOR_XRGB(((tag.color >> 16) & 0xFF) / 6, ((tag.color >> 8) & 0xFF) / 6, (tag.color & 0xFF) / 6);
+  Gradient gradient(tag.color, 192, min_z, max_z);
+  Gradient gradient2(tag.color, 64, min_z, max_z, 0.0f, 0.7f);
+  Gradient light_gradient(light, 224, min_z, max_z);
+  Gradient light_gradient2(light, 96, min_z, max_z, 0.0f, 0.7f);
+  // Contrast parts (a badge's digits) take the dark accent on a light tag color, else the light one.
+  const int luminance = static_cast<int>(
+      (((tag.color >> 16) & 0xFF) * 299 + ((tag.color >> 8) & 0xFF) * 587 + (tag.color & 0xFF) * 114) / 1000);
+  const auto contrast = (luminance > 140) ? TagShapes::Tone::Dark : TagShapes::Tone::Light;
+  // Eyes glow a fixed yellow; shaded parts (the moon's craters) are the tag color darkened.
+  Gradient eye_gradient(kEyeYellow, 255, min_z, max_z, 0.55f);
+  Gradient eye_gradient2(kEyeYellow, 160, min_z, max_z, 0.4f);
+  const D3DCOLOR shade = D3DCOLOR_XRGB(((tag.color >> 16) & 0xFF) * 7 / 10, ((tag.color >> 8) & 0xFF) * 7 / 10,
+                                       (tag.color & 0xFF) * 7 / 10);
+  Gradient shade_gradient(shade, 150, min_z, max_z);
+  Gradient shade_gradient2(shade, 50, min_z, max_z, 0.0f, 0.7f);
+
+  std::vector<ArrowVertex> vertices;
+  vertices.reserve(icon.mesh.vertices.size());
+  for (const auto &vertex : icon.mesh.vertices) {
+    const auto tone = (vertex.tone == TagShapes::Tone::Contrast) ? contrast : vertex.tone;
+    D3DCOLOR color = dark;
+    if (tone == TagShapes::Tone::Base)
+      color = vertex.y < 0 ? gradient.GetColor(vertex.z) : gradient2.GetColor(vertex.z);
+    else if (tone == TagShapes::Tone::Light)
+      color = vertex.y < 0 ? light_gradient.GetColor(vertex.z) : light_gradient2.GetColor(vertex.z);
+    else if (tone == TagShapes::Tone::Eye)
+      color = vertex.y < 0 ? eye_gradient.GetColor(vertex.z) : eye_gradient2.GetColor(vertex.z);
+    else if (tone == TagShapes::Tone::Shade)
+      color = vertex.y < 0 ? shade_gradient.GetColor(vertex.z) : shade_gradient2.GetColor(vertex.z);
+    vertices.push_back({.x = vertex.x, .y = vertex.y, .z = vertex.z, .color = color});
+  }
+
+  int start_vertex_index = AppendVertices(vertices);
+  if (start_vertex_index < 0) return RenderInfo();
+
+  render_infos.emplace_back(RenderInfo{.shape = tag.shape,
+                                       .color = tag.color,
+                                       .start_vertex_index = start_vertex_index,
+                                       .num_vertices = vertices.size(),
+                                       .start_index = icon.index_start,
+                                       .num_primitives = icon.primitive_count,
                                        .bearing = tag.bearing});
   return render_infos.back();
 }

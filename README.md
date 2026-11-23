@@ -746,7 +746,35 @@ Manual editing of the ini file is required to copy from old section to the new s
       - Colored arrow: (`R` = red, `O` = orange, `Y` = yellow, `G` = green, `B` = blue, `W` = white)
       - Green pet paw symbol: `P`
       - Red stop sign (octagon): `S`
+      - Icon shapes (only drawn with `/tag shapes on`, default off; otherwise a plain arrow in the shape's
+        color): `K` = skull, `X` = red X, `A` = gold sword, `D` = blue diamond, `F` = green flame,
+        `T` = purple star, `WP` = wolf (`^WP^`), `M` = moon (mez), `U` = lasso (pull), `N` = lute (bard),
+        `H` = shield (tank), `$` = dollar, `E` = euro
+      - Numbered badges: `1` to `12` (e.g. `^7^`, `^12^`), readable from either side
+      - Paw with a letter or digit on it: `P` then the character (e.g. `^PK^`), for a charmer's initial
+      - A guild's icon: `I` then the guild's code (e.g. `^IEUR^`, `^IMAY^`). `/tag guilds` lists the codes. An
+        unknown code is read as the single letter (`^Fire^` is still a flame, `^Blue^` a blue arrow)
+      - A picture: `I` then the name of a `.png` or `.tga` file in `uifiles/zeal/tagicons` (e.g. `^IEUR^`
+        for `EUR.png`), drawn flat and facing you. Names are 1 to 6 letters or digits; files up to 128
+        pixels a side and 1 MB, with a transparent background. A picture takes over from a guild's
+        built-in icon with the same code (`EUR.png`, or the whole key `IEUR.png`, for `^IEUR^`; Windows
+        allows no file called `CON.png`, so `ICON.png` serves `^ICON^`). Only players who have the file see the
+        picture; others see the guild's built-in shape, or just the text. Your own pictures go in
+        `uifiles/zeal/tagicons/custom`: nothing installs into it, and a picture there wins over one with the
+        same name in `tagicons`, so it survives updates. `/tag icons` lists the pictures, marks yours,
+        creates the `custom` folder if it is missing and reads both folders again
       - Clear any existing shape: `-`
+- Guild marks: `/tag guildmarks <off | tagged | auto>` (no argument shows the current mode; local only,
+  never broadcast)
+  - `off` hides every guild icon (`^I..^`), including ones other players tagged. Plain
+    symbols such as `^E^`, `^$^` and `^WP^` are not guild marks and still show
+  - `tagged` (default) shows only the marks someone tagged
+  - `auto` also draws each nearby player's own guild icon above their nameplate when the player has no tag
+    shape of their own. Only for players in a guild listed by `/tag guilds`, within 150 units, who are not
+    anonymous (roleplaying players still show their guild, so they get one). Needs Nameplates Zeal fonts; does
+    not need `/tag on`. The guild is matched by its full name as shown on the nameplate (`/tag guilds` lists
+    them). A guild with a picture file (`<code>.png` or `I<code>.png`) shows the picture instead, which draws
+    faster than a built-in shape
 - Tags can be cleared with:
   - `/tag clear`: Clears tag from current target if there is a target else all tags
   - `/tag local -`: Clears text only from current target locally (can also gsay, rsay, chat)
@@ -782,6 +810,9 @@ Manual editing of the ini file is required to copy from old section to the new s
   - `/tag rsay Assist me` broadcasts a raid-wide tag that sets 'Assist Me'
   - `/tag rsay +TASH` appends ' | TASH' to the tag text (does not affect explicit shape)
   - `/tag rsay ^p^` adds an explicit paw shape above the target for all raid members
+  - `/tag rsay ^k^Kill first` adds a skull above the target with the text 'Kill first'
+  - `/tag rsay ^3^` adds a numbered badge 3 above the target (e.g. a kill or crowd-control order)
+  - `/tag rsay ^PK^` adds a paw with a K on it (a charmer marking their pet)
   - `/tag rsay -` clears text but leaves shape if explicitly set
   - `/tag rsay ^-^` leaves text but clears the shape
   - `/tag rsay +^Y^OFFTANK` appends ' | OFFTANK' to the tag text and adds explicit yellow arrow shape

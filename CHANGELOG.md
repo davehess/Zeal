@@ -3,6 +3,16 @@
 Summarizes notable changes to Zeal
 
 
+## [Unreleased]
+
+### New features
+
+* `/tag shapes <on | off>` (default off): tag icon shapes (skull, X, sword, diamond, flame, star, wolf, moon, lasso, lute, shield, dollar, euro),
+  numbered badges 1 to 12, paws with a letter or digit, and an icon for each guild listed by `/tag guilds`,
+  e.g. `^K^`, `^7^`, `^PK^`, `^IEUR^`
+* Tag pictures: `^I<name>^` draws a `.png` or `.tga` from `uifiles/zeal/tagicons`; `/tag icons` lists them
+* `/tag guildmarks <off | tagged | auto>` hides guild icons or draws each nearby player's own guild icon
+
 ## [1.5.0] - 2026/11/18
 
 ### New features
