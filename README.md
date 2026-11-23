@@ -492,6 +492,11 @@ ___
   - **Example:** `/spellset delete buffs`
   - **Description:** allows you to save and load spellsets
 
+- `/spellid`
+  - **Arguments:** `on`, `off` (none toggles)
+  - **Description:** Adds a `Spell ID: <id>` line to spell info windows (spell gems, spellbook, buffs) and to
+    mouseover spell tooltips, for tools that block or track buffs by id. Off by default.
+
 - `/stopsong`
   - **Description:** Fixes a client bug so /stopsong doesn't desync from server with clickies.
 
@@ -723,6 +728,8 @@ Manual editing of the ini file is required to copy from old section to the new s
 - Requires enabling both Nameplates Zeal fonts and tags (`/tag on`)
 - Tagged NPC nameplates use either the dedicated `Tagged` color or if targeted the `Target` color
 - Tagged nameplates have a matching implicit colored arrow added if `Default tag arrow` is set
+- Corpses (NPC and player) can be tagged too. A corpse only shows tags set after the death, so a tag the
+  mob had in life does not carry over to its corpse
 - Tags can be set locally or broadcast to others through rsay, gsay, or a joined chat channel.
   - The `rsgs` option will broadcast to rsay if in a raid, else gsay if in a group, else to local (self only). 
   - `/tag <rsay | gsay | rsgs | chat | local> <tag_text>`
@@ -764,6 +771,12 @@ Manual editing of the ini file is required to copy from old section to the new s
   - Targets closest NPC if multiple matches
 - International keyboard support:
   - Nameplate Tab Alternate Symbols options allows `*` in place of `^`.
+- Tags can be kept through zoning, a character switch and a client crash with `/tag persist on` (default off)
+  - Tags are saved to `<character>_tags.txt` in the EverQuest folder when they change
+  - A saved tag returns when a mob with the same zone, spawn id and name appears again
+  - A player's tag is saved by name instead, since a player gets a new spawn id on each zone-in
+  - Saved tags are dropped when cleared, when the mob dies, or 3 hours after they were last seen
+  - While off, tags are not saved or loaded
 
 ### Tagging Examples
   - `/tag rsay Assist me` broadcasts a raid-wide tag that sets 'Assist Me'
@@ -875,6 +888,14 @@ stream describes a target or pet with only a name and an HP per-mille value.
   - `pet_id` - the spawn id of your pet
 
 `target_id` and `pet_id` are omitted entirely when there is no target or no pet.
+
+The `player` message also carries your pet's position, so a map consumer can draw it without you
+targeting it:
+- `pet_loc` - the pet's current position, same `{x, y, z}` shape as `location`
+- `pet_heading` - the pet's current heading, same units as `heading`
+
+Both are omitted when there is no pet or its entity can't be found. Unlike `target_loc` there is
+no distance limit, since it is your own pet.
 
 #### Target descriptors
 The `player` message also describes the current target, so that a consumer can
