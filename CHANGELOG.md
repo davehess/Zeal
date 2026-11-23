@@ -11,6 +11,8 @@ Summarizes notable changes to Zeal
   numbered badges 1 to 12, paws with a letter or digit, and an icon for each guild listed by `/tag guilds`,
   e.g. `^K^`, `^7^`, `^PK^`, `^IEUR^`
 * Tag pictures: `^I<name>^` draws a `.png` or `.tga` from `uifiles/zeal/tagicons`; `/tag icons` lists them
+* Seventeen guild logos ship as pictures in `uifiles/zeal/tagicons` (e.g. `^IEUR^` draws `EUR.png`); a file in
+  `tagicons/custom` replaces one
 * `/tag guildmarks <off | tagged | auto>` hides guild icons or draws each nearby player's own guild icon
 
 ## [1.5.0] - 2026/11/18
